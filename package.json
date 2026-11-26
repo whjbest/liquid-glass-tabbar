@@ -1,0 +1,70 @@
+{
+  "name": "liquid-glass-tabbar",
+  "version": "0.1.0",
+  "description": "High-fidelity iOS 26 Liquid Glass TabBar for React and WebKit (Safari / WKWebView)",
+  "license": "MIT",
+  "type": "module",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/whjbest/liquid-glass-tabbar.git"
+  },
+  "homepage": "https://whjbest.github.io/liquid-glass-tabbar/",
+  "keywords": [
+    "react",
+    "liquid-glass",
+    "ios26",
+    "tabbar",
+    "swiftui",
+    "webkit",
+    "wkwebview",
+    "glassmorphism",
+    "telegram-mini-app"
+  ],
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./styles.css": "./dist/styles.css"
+  },
+  "main": "./dist/index.js",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "sideEffects": [
+    "**/*.css"
+  ],
+  "scripts": {
+    "dev": "vite --config vite.demo.config.ts --host",
+    "build": "bun run build:lib && bun run build:demo",
+    "build:lib": "vite build --config vite.config.ts && tsc -p tsconfig.build.json --emitDeclarationOnly",
+    "build:demo": "vite build --config vite.demo.config.ts",
+    "preview:demo": "vite preview --config vite.demo.config.ts --host",
+    "typecheck": "tsc --noEmit",
+    "lint": "biome check src demo tests vite.config.ts vite.demo.config.ts",
+    "format": "biome check --write src demo tests vite.config.ts vite.demo.config.ts",
+    "test": "bun test tests",
+    "prepare": "bun run build:lib",
+    "check": "bun run typecheck && bun run lint && bun run test && bun run build"
+  },
+  "peerDependencies": {
+    "react": ">=18.0.0",
+    "react-dom": ">=18.0.0"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^2.3.11",
+    "@types/bun": "^1.4.5",
+    "@types/react": "^19.2.0",
+    "@types/react-dom": "^19.2.0",
+    "@vitejs/plugin-react": "^5.1.0",
+    "happy-dom": "^20.0.0",
+    "react": "^19.2.0",
+    "react-dom": "^19.2.0",
+    "typescript": "~5.9.3",
+    "vite": "^7.3.1"
+  }
+}
