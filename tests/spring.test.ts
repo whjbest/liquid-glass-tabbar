@@ -1,7 +1,9 @@
 import { describe, expect, test } from "bun:test";
 import {
+  computeJellyTarget,
   computeLiquidDeformation,
   isSpringSettled,
+  jellyToDeformation,
   rubberBand,
   stepSpring,
 } from "../src/spring";
@@ -69,5 +71,33 @@ describe("rubberBand & liquid deformation", () => {
     const squeezed = computeLiquidDeformation(0, 0.8, 1);
     expect(squeezed.scaleX).toBeLessThan(1);
     expect(squeezed.scaleY).toBeGreaterThan(1);
+  });
+
+  test("coupled jelly oscillator stretches on launch, squishes below 1 on braking, and settles", () => {
+    let x = { value: 0, velocity: 0 };
+    let jelly = { value: 0, velocity: 1.8 };
+    let maxScaleX = 1;
+    let minScaleX = 1;
+    const dt = 1 / 120;
+
+    for (let i = 0; i < 180; i++) {
+      const prevVx = x.velocity;
+      x = stepSpring(x, 220, dt, { response: 0.38, dampingFraction: 0.68 });
+      const ax = (x.velocity - prevVx) / dt;
+      const target = computeJellyTarget(x.velocity, ax, 0, 1.15);
+      jelly = stepSpring(jelly, target, dt, {
+        response: 0.27,
+        dampingFraction: 0.45,
+      });
+      const def = jellyToDeformation(jelly.value, x.velocity, 0);
+      if (def.scaleX > maxScaleX) maxScaleX = def.scaleX;
+      if (def.scaleX < minScaleX) minScaleX = def.scaleX;
+      // Volume conservation check: scaleX * scaleY^2 ≈ 1
+      expect(def.scaleX * def.scaleY * def.scaleY).toBeCloseTo(1, 1);
+    }
+
+    expect(maxScaleX).toBeGreaterThan(1.08);
+    expect(minScaleX).toBeLessThan(0.97);
+    expect(isSpringSettled(jelly, 0, 0.01, 0.05)).toBe(true);
   });
 });

@@ -133,24 +133,41 @@ export type LiquidDeformation = {
 };
 
 /**
- * Computes area-preserving liquid droplet deformation from horizontal velocity
- * and boundary rubber-band compression.
+ * Computes the target aspect-ratio deformation (`jellyTarget`) from horizontal
+ * velocity, braking deceleration (`ax`), and boundary rubber-band overshoot.
+ *
+ * - Accelerating / fast flight → positive target (elongates horizontally).
+ * - Braking into target tab (`vx * ax < 0`) → negative target (squishes
+ *   horizontally and bulges vertically on impact like real jelly).
+ * - Dragging past track ends → negative target (boundary compression).
  */
-export function computeLiquidDeformation(
+export function computeJellyTarget(
   velocityX: number,
+  accelX: number,
   overshoot: number,
   intensity = 1,
-): LiquidDeformation {
-  const clampedIntensity = Math.min(Math.max(intensity, 0), 2);
-  const speedStretch =
-    Math.tanh(Math.abs(velocityX) / 1350) * 0.16 * clampedIntensity;
-  const edgeCompress = Math.abs(overshoot) * 0.14 * clampedIntensity;
+): number {
+  const k = Math.min(Math.max(intensity, 0), 2);
+  const speedStretch = Math.tanh(Math.abs(velocityX) / 880) * 0.22 * k;
+  const isBraking = velocityX * accelX < 0;
+  const brakeSquish = isBraking
+    ? -Math.tanh(Math.abs(accelX) / 13000) * 0.16 * k
+    : 0;
+  const edgeCompress = -Math.abs(overshoot) * 0.17 * k;
+  return speedStretch + brakeSquish + edgeCompress;
+}
 
-  const rawScaleX = 1 + speedStretch - edgeCompress;
-  const scaleX = Math.min(Math.max(rawScaleX, 0.88), 1.18);
-  // Preserve visual volume of the liquid droplet: scaleY ≈ 1 / sqrt(scaleX)
-  const rawScaleY = 1 / Math.sqrt(scaleX);
-  const scaleY = Math.min(Math.max(rawScaleY, 0.9), 1.09);
+/**
+ * Converts a spring-driven jelly aspect value into volume-preserving
+ * (`scaleX * scaleY^2 ≈ 1`) droplet scale and dynamic specular highlight offset.
+ */
+export function jellyToDeformation(
+  jelly: number,
+  velocityX: number,
+  overshoot: number,
+): LiquidDeformation {
+  const scaleX = Math.min(Math.max(1 + jelly, 0.85), 1.24);
+  const scaleY = Math.min(Math.max(1 / Math.sqrt(scaleX), 0.88), 1.1);
 
   const velocityBias = Math.tanh(velocityX / 850);
   const lightOffset = Math.min(
@@ -159,4 +176,16 @@ export function computeLiquidDeformation(
   );
 
   return { scaleX, scaleY, lightOffset };
+}
+
+/**
+ * Memoryless convenience helper kept for backwards compatibility.
+ */
+export function computeLiquidDeformation(
+  velocityX: number,
+  overshoot: number,
+  intensity = 1,
+): LiquidDeformation {
+  const jelly = computeJellyTarget(velocityX, 0, overshoot, intensity);
+  return jellyToDeformation(jelly, velocityX, overshoot);
 }

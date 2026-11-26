@@ -17,8 +17,9 @@ import {
   supportsSvgBackdropRefraction,
 } from "./optics";
 import {
-  computeLiquidDeformation,
+  computeJellyTarget,
   isSpringSettled,
+  jellyToDeformation,
   rubberBand,
   type SpringState,
   stepSpring,
@@ -198,6 +199,7 @@ export function LiquidGlassTabBar({
   const springWRef = useRef<SpringState>({ value: 0, velocity: 0 });
   const springLiftRef = useRef<SpringState>({ value: 0, velocity: 0 });
   const springPressRef = useRef<SpringState>({ value: 0, velocity: 0 });
+  const springJellyRef = useRef<SpringState>({ value: 0, velocity: 0 });
   const targetXRef = useRef(0);
   const targetWRef = useRef(0);
   const targetLiftRef = useRef(0);
@@ -247,7 +249,6 @@ export function LiquidGlassTabBar({
     const firstItem = layout.items[0];
     if (!firstItem) return;
 
-    const c = cfgRef.current;
     const isLiquid = variantRef.current === "liquid";
     const reduced = reducedMotionRef.current;
 
@@ -259,13 +260,17 @@ export function LiquidGlassTabBar({
 
     const cx = springXRef.current.value;
     const vx = springXRef.current.velocity;
+    const jelly = isLiquid && !reduced ? springJellyRef.current.value : 0;
     const baseW = Math.max(springWRef.current.value, 24);
     const baseH = firstItem.height;
     const cy = firstItem.centerY;
 
+    // Keep the clear crystal droplet visibly glossy during both flight and landing jelly wobble
+    const speedLift = Math.tanh(Math.abs(vx) / 620) * 0.96;
+    const wobbleLift = Math.min(0.82, Math.abs(jelly) * 3.4);
     const flightLift =
       isLiquid && !reduced
-        ? Math.min(0.92, Math.tanh(Math.abs(vx) / 700) * 0.98)
+        ? Math.min(0.95, Math.max(speedLift, wobbleLift))
         : 0;
     const lift =
       isLiquid && !reduced
@@ -284,7 +289,7 @@ export function LiquidGlassTabBar({
 
     const { scaleX, scaleY, lightOffset } =
       isLiquid && !reduced
-        ? computeLiquidDeformation(vx, overshootRef.current, c.squishIntensity)
+        ? jellyToDeformation(jelly, vx, overshootRef.current)
         : { scaleX: 1, scaleY: 1, lightOffset: 0 };
 
     const clampedOpacityLift = Math.min(1, Math.max(0, lift));
@@ -320,6 +325,7 @@ export function LiquidGlassTabBar({
         springWRef.current = { value: targetWRef.current, velocity: 0 };
         springLiftRef.current = { value: targetLiftRef.current, velocity: 0 };
         springPressRef.current = { value: targetPressRef.current, velocity: 0 };
+        springJellyRef.current = { value: 0, velocity: 0 };
         paintLens();
         rafRef.current = 0;
         return;
@@ -333,18 +339,24 @@ export function LiquidGlassTabBar({
       const liftParams =
         targetLiftRef.current > springLiftRef.current.value
           ? { response: 0.22, dampingFraction: 0.72 }
-          : { response: 0.36, dampingFraction: 0.66 };
+          : { response: 0.36, dampingFraction: 0.64 };
       const pressParams =
         targetPressRef.current > springPressRef.current.value
-          ? { response: 0.24, dampingFraction: 0.76 }
-          : { response: 0.36, dampingFraction: 0.62 };
+          ? { response: 0.24, dampingFraction: 0.74 }
+          : { response: 0.36, dampingFraction: 0.6 };
+      // Underdamped coupled gelatin spring: stretches on launch, squishes on brake, wobbles cleanly
+      const jellyParams = { response: 0.27, dampingFraction: 0.45 };
 
+      const prevVx = springXRef.current.velocity;
       springXRef.current = stepSpring(
         springXRef.current,
         targetXRef.current,
         dt,
         xParams,
       );
+      const clampedDt = Math.min(Math.max(dt, 0.001), 0.05);
+      const accelX = (springXRef.current.velocity - prevVx) / clampedDt;
+
       springWRef.current = stepSpring(
         springWRef.current,
         targetWRef.current,
@@ -362,6 +374,18 @@ export function LiquidGlassTabBar({
         targetPressRef.current,
         dt,
         pressParams,
+      );
+      const jellyTarget = computeJellyTarget(
+        springXRef.current.velocity,
+        accelX,
+        overshootRef.current,
+        c.squishIntensity,
+      );
+      springJellyRef.current = stepSpring(
+        springJellyRef.current,
+        jellyTarget,
+        dt,
+        jellyParams,
       );
 
       paintLens();
@@ -381,13 +405,15 @@ export function LiquidGlassTabBar({
           targetPressRef.current,
           0.004,
           0.02,
-        );
+        ) &&
+        isSpringSettled(springJellyRef.current, 0, 0.002, 0.015);
 
       if (settled) {
         springXRef.current = { value: targetXRef.current, velocity: 0 };
         springWRef.current = { value: targetWRef.current, velocity: 0 };
         springLiftRef.current = { value: targetLiftRef.current, velocity: 0 };
         springPressRef.current = { value: targetPressRef.current, velocity: 0 };
+        springJellyRef.current = { value: 0, velocity: 0 };
         overshootRef.current = 0;
         paintLens();
         rafRef.current = 0;
@@ -476,6 +502,9 @@ export function LiquidGlassTabBar({
     }
     const targetRect = layout.items[activeIndex];
     if (!targetRect) return;
+    const travelDistance = Math.abs(
+      targetRect.centerX - springXRef.current.value,
+    );
     targetXRef.current = targetRect.centerX;
     targetWRef.current = targetRect.width;
     targetLiftRef.current = 0;
@@ -485,9 +514,17 @@ export function LiquidGlassTabBar({
       springXRef.current = { value: targetRect.centerX, velocity: 0 };
       springWRef.current = { value: targetRect.width, velocity: 0 };
       springLiftRef.current = { value: 0, velocity: 0 };
+      springJellyRef.current = { value: 0, velocity: 0 };
       initializedRef.current = true;
       paintLens();
     } else {
+      // Inject crisp jelly launch stretch + subtle track breath on tab switch
+      if (travelDistance > 4 && variantRef.current === "liquid") {
+        const k = cfgRef.current.squishIntensity;
+        springJellyRef.current.velocity +=
+          Math.min(2.8, (travelDistance / 90) * 1.55) * k;
+        springPressRef.current.velocity += 1.2;
+      }
       startLoop();
     }
   }, [activeIndex, paintLens, startLoop]);
@@ -833,6 +870,11 @@ export function LiquidGlassTabBar({
         if (committedRect) {
           targetXRef.current = committedRect.centerX;
           targetWRef.current = committedRect.width;
+        }
+        // Subtle inward squish impulse so releasing the droplet produces a juicy jelly wobble
+        if (variantRef.current === "liquid") {
+          springJellyRef.current.velocity -=
+            1.6 * cfgRef.current.squishIntensity;
         }
         onItemActivate?.(committed.value);
         if (committed.value !== value) {
