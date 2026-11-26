@@ -63,6 +63,14 @@ export type LiquidGlassConfig = {
    * dual-zone optical portal lens stack. Default: true.
    */
   enableSvgRefraction?: boolean;
+  /**
+   * Which refraction path to use:
+   * - "auto": SVG backdrop refraction where supported (Chromium), WebGL lens
+   *   refraction elsewhere (iOS Safari / WKWebView), CSS blur as last resort.
+   * - "svg" / "webgl" / "css": force one path (useful for comparing).
+   * Default: "auto".
+   */
+  refractionEngine?: "auto" | "svg" | "webgl" | "css";
 };
 
 export type LiquidGlassTabBarProps = {
@@ -107,4 +115,5 @@ export const LIQUID_GLASS_DEFAULTS: Required<
   springDamping: 0.78,
   squishIntensity: 1.1,
   enableSvgRefraction: true,
+  refractionEngine: "auto",
 };

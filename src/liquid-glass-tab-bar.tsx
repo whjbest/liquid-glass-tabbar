@@ -11,6 +11,12 @@ import {
   useRef,
   useState,
 } from "react";
+import { type GlLensParams, GlLensRenderer } from "./gl-lens";
+import {
+  composeTrackTexture,
+  loadRasterSources,
+  type RasterCache,
+} from "./gl-raster";
 import {
   createCapsuleRefractionFilter,
   type SdfRefractionHandle,
@@ -58,6 +64,9 @@ type DragSession = {
 
 const LENS_EXTRA_WIDTH = 14;
 const LENS_EXTRA_HEIGHT = 18;
+/** Room around the track in the WebGL texture for the overhanging lens. */
+const GL_MARGIN_X = 12;
+const GL_MARGIN_Y = 16;
 
 function DefaultSearchIcon() {
   return (
@@ -176,11 +185,13 @@ export function LiquidGlassTabBar({
   );
 
   const trackRef = useRef<HTMLDivElement>(null);
+  const rootRef = useRef<HTMLElement>(null);
   const trackCoreRef = useRef<HTMLDivElement>(null);
   const searchRef = useRef<HTMLDivElement>(null);
   const searchCoreRef = useRef<HTMLDivElement>(null);
   const lensRef = useRef<HTMLDivElement>(null);
   const lensFillRef = useRef<HTMLDivElement>(null);
+  const glCanvasRef = useRef<HTMLCanvasElement>(null);
 
   const layoutRef = useRef<TrackLayout | null>(null);
   const [hasLayout, setHasLayout] = useState(false);
@@ -189,6 +200,14 @@ export function LiquidGlassTabBar({
   const [searchPressed, setSearchPressed] = useState(false);
   const [focusedValue, setFocusedValue] = useState<string | null>(null);
   const [svgLensActive, setSvgLensActive] = useState(false);
+  const [glActive, setGlActive] = useState(false);
+
+  // WebGL lens (iOS WebKit path)
+  const glRendererRef = useRef<GlLensRenderer | null>(null);
+  const glActiveRef = useRef(false);
+  const glLensRef = useRef<GlLensParams | null>(null);
+  const glComposeRef = useRef<() => void>(() => {});
+  const rasterCacheRef = useRef<RasterCache>(new Map());
 
   const reducedMotionRef = useRef(false);
   const dragRef = useRef<DragSession | null>(null);
@@ -330,6 +349,23 @@ export function LiquidGlassTabBar({
     lensEl.style.setProperty("--lgtb-lift", clampedOpacityLift.toFixed(4));
     lensEl.style.setProperty("--lgtb-light-x", lightOffset.toFixed(4));
     lensEl.dataset.elevated = clampedOpacityLift > 0.02 ? "true" : "false";
+
+    // WebGL lens: same geometry, refracting the rasterized track foreground.
+    const c = cfgRef.current;
+    glLensRef.current = {
+      centerX: cx,
+      centerY: cy,
+      halfW: w / 2,
+      halfH: h / 2,
+      scaleX,
+      scaleY,
+      lift: clampedOpacityLift,
+      magnification: 1 + (Math.max(c.lensMagnification, 1) - 1) * 0.7,
+      bevel: 16,
+      strength: 9.5 * c.refraction,
+      chroma: 0.16 * c.chromaticAberration,
+    };
+    if (glActiveRef.current) glRendererRef.current?.render(glLensRef.current);
   }, []);
 
   const stopLoop = useCallback(() => {
@@ -574,6 +610,8 @@ export function LiquidGlassTabBar({
     if (
       variant !== "liquid" ||
       !cfg.enableSvgRefraction ||
+      cfg.refractionEngine === "webgl" ||
+      cfg.refractionEngine === "css" ||
       typeof document === "undefined" ||
       !supportsSvgBackdropRefraction()
     ) {
@@ -690,12 +728,150 @@ export function LiquidGlassTabBar({
   }, [
     variant,
     cfg.enableSvgRefraction,
+    cfg.refractionEngine,
     cfg.blur,
     cfg.refraction,
     cfg.chromaticAberration,
     itemsSignature,
     size,
   ]);
+
+  // WebGL lens refraction: the default on engines without SVG backdrop
+  // filters (iOS Safari / WKWebView), or when forced via refractionEngine.
+  useEffect(() => {
+    const engine = cfg.refractionEngine;
+    const wantGl =
+      variant === "liquid" &&
+      typeof window !== "undefined" &&
+      (engine === "webgl" ||
+        (engine === "auto" && !supportsSvgBackdropRefraction()));
+    const canvas = glCanvasRef.current;
+    const track = trackRef.current;
+    if (!wantGl || !canvas || !track) return;
+
+    let renderer: GlLensRenderer;
+    try {
+      renderer = new GlLensRenderer(canvas);
+    } catch {
+      return;
+    }
+    glRendererRef.current = renderer;
+
+    let disposed = false;
+    let generation = 0;
+    let retries = 0;
+    const composeTarget = document.createElement("canvas");
+
+    const disable = () => {
+      glActiveRef.current = false;
+      setGlActive(false);
+    };
+
+    const compose = () => {
+      const trackEl = trackRef.current;
+      const root = rootRef.current;
+      if (disposed || !trackEl || !root) return;
+      const run = ++generation;
+      const dpr = Math.min(3, window.devicePixelRatio || 1);
+      const result = composeTrackTexture({
+        track: trackEl,
+        root,
+        cache: rasterCacheRef.current,
+        target: composeTarget,
+        dpr,
+        marginX: GL_MARGIN_X,
+        marginY: GL_MARGIN_Y,
+      });
+      if (result.failed) {
+        disable();
+        return;
+      }
+      if (result.missing.length) {
+        // Keep the previous frame until every icon is ready, then redraw.
+        void loadRasterSources(result.missing, rasterCacheRef.current).then(
+          (ok) => {
+            if (disposed || run !== generation) return;
+            if (!ok || ++retries > 4) {
+              disable();
+              return;
+            }
+            compose();
+          },
+        );
+        return;
+      }
+      retries = 0;
+      canvas.style.left = `${-GL_MARGIN_X}px`;
+      canvas.style.top = `${-GL_MARGIN_Y}px`;
+      canvas.style.width = `${result.cssWidth}px`;
+      canvas.style.height = `${result.cssHeight}px`;
+      renderer.setFrame(
+        result.cssWidth,
+        result.cssHeight,
+        dpr,
+        GL_MARGIN_X,
+        GL_MARGIN_Y,
+      );
+      try {
+        // Throws on tainted (cross-origin) icon sources.
+        renderer.upload(composeTarget);
+      } catch {
+        disable();
+        return;
+      }
+      renderer.render(glLensRef.current);
+      if (!glActiveRef.current) {
+        glActiveRef.current = true;
+        setGlActive(true);
+      }
+    };
+    glComposeRef.current = compose;
+
+    const onLost = (event: Event) => {
+      event.preventDefault();
+      disable();
+    };
+    canvas.addEventListener("webglcontextlost", onLost);
+
+    compose();
+
+    let frame = 0;
+    const schedule = () => {
+      cancelAnimationFrame(frame);
+      frame = requestAnimationFrame(compose);
+    };
+    const observer =
+      typeof ResizeObserver === "undefined"
+        ? undefined
+        : new ResizeObserver(schedule);
+    observer?.observe(track);
+    window.addEventListener("resize", schedule);
+    document.fonts?.addEventListener("loadingdone", schedule);
+
+    return () => {
+      disposed = true;
+      cancelAnimationFrame(frame);
+      observer?.disconnect();
+      window.removeEventListener("resize", schedule);
+      document.fonts?.removeEventListener("loadingdone", schedule);
+      canvas.removeEventListener("webglcontextlost", onLost);
+      glComposeRef.current = () => {};
+      renderer.destroy();
+      glRendererRef.current = null;
+      glActiveRef.current = false;
+      setGlActive(false);
+    };
+  }, [variant, cfg.refractionEngine]);
+
+  // Redraw the texture whenever what the track shows changes.
+  useLayoutEffect(() => {
+    void displayedActiveValue;
+    void items;
+    void resolvedAppearance;
+    void size;
+    void cfg.specular;
+    glComposeRef.current();
+  }, [displayedActiveValue, items, resolvedAppearance, size, cfg.specular]);
 
   const resolvePointerTrack = useCallback(
     (clientX: number) => {
@@ -984,6 +1160,7 @@ export function LiquidGlassTabBar({
 
   return (
     <nav
+      ref={rootRef}
       aria-label={ariaLabel}
       data-slot="tab-bar"
       data-appearance={resolvedAppearance}
@@ -999,6 +1176,7 @@ export function LiquidGlassTabBar({
         data-slot="tab-bar-list"
         data-elevated={elevated ? "true" : "false"}
         data-svg-lens={svgLensActive ? "true" : "false"}
+        data-gl-lens={glActive ? "true" : "false"}
         className="lgtb-track"
         onPointerDown={handlePointerDown}
         onPointerMove={handlePointerMove}
@@ -1059,6 +1237,13 @@ export function LiquidGlassTabBar({
             </button>
           );
         })}
+
+        {/* WebGL foreground: draws icons, labels and rim lines, refracted inside the lens */}
+        <canvas
+          ref={glCanvasRef}
+          data-slot="tab-bar-gl"
+          className="lgtb-gl-canvas"
+        />
 
         {/* Interactive Liquid Glass Lens Droplet (Single-Pass, Zero Ghosting) */}
         <div

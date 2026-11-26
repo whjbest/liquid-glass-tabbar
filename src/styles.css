@@ -319,9 +319,15 @@
   transition: transform 200ms cubic-bezier(0.22, 1.35, 0.36, 1);
 }
 
-/* On engines without SVG backdrop refraction (iOS WebKit), smoothly magnify
-   the actual item under the lifted droplet directly — zero duplicate ghosting! */
-.lgtb-track[data-svg-lens="false"]
+/* With the WebGL lens, the canvas paints the items; the DOM stays laid out
+   and accessible underneath. */
+.lgtb-track[data-gl-lens="true"] .lgtb-item-content {
+  opacity: 0;
+}
+
+/* On engines without SVG backdrop refraction (iOS WebKit) and without the
+   WebGL lens, smoothly magnify the actual item under the lifted droplet. */
+.lgtb-track[data-svg-lens="false"][data-gl-lens="false"]
   .lgtb-item[data-held="true"]
   .lgtb-item-content {
   transform: scale(var(--lgtb-lens-mag, 1.14));
@@ -501,6 +507,33 @@
   z-index: -1;
   box-shadow: var(--lgtb-lens-shadow);
   opacity: var(--lgtb-lift);
+}
+
+/* ============================================================================
+ * WebGL Lens Foreground (iOS Safari / WKWebView refraction path)
+ * The canvas draws the track's icons, labels and rim lines 1:1 at rest and
+ * refracts them inside the lifted lens. It sits above the items (2) and the
+ * resting pill (lens z 1), below the elevated lens highlights (lens z 6).
+ * ========================================================================== */
+
+.lgtb-gl-canvas {
+  position: absolute;
+  top: 0;
+  left: 0;
+  z-index: 3;
+  width: 0;
+  height: 0;
+  pointer-events: none;
+  opacity: 0;
+}
+
+.lgtb-track[data-gl-lens="true"] .lgtb-gl-canvas {
+  opacity: 1;
+}
+
+/* The DOM stays laid out and accessible; the canvas paints the rim instead. */
+.lgtb-track[data-gl-lens="true"] > .lgtb-specular {
+  opacity: 0;
 }
 
 /* ============================================================================

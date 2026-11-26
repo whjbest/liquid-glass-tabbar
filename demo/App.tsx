@@ -190,13 +190,14 @@ export function App() {
   }, []);
 
   const items = useMemo(() => ALL_TABS.slice(0, tabCount), [tabCount]);
-  const engineLabel = useMemo(
-    () =>
-      supportsSvgBackdropRefraction()
-        ? "Snell SDF + RGB Dispersion"
-        : "WebKit Clear Rim + Dual-Zone Lens",
-    [],
-  );
+  const engine = config.refractionEngine ?? "auto";
+  const engineLabel = useMemo(() => {
+    const svg = supportsSvgBackdropRefraction();
+    if (engine === "css") return "CSS Blur";
+    if (engine === "webgl" || (engine === "auto" && !svg))
+      return "WebGL Snell Lens";
+    return svg ? "SVG Snell Refraction" : "CSS Blur";
+  }, [engine]);
 
   const updateConfig = <K extends keyof LiquidGlassConfig>(
     key: K,
@@ -474,6 +475,23 @@ export function App() {
               >
                 Search: {showSearch ? "On" : "Off"}
               </button>
+              <div className="demo-pill-group">
+                {(["auto", "webgl", "svg", "css"] as const).map((option) => (
+                  <button
+                    key={option}
+                    type="button"
+                    className="demo-chip"
+                    data-active={engine === option}
+                    onClick={() => updateConfig("refractionEngine", option)}
+                  >
+                    {option === "auto"
+                      ? "Auto"
+                      : option === "webgl"
+                        ? "WebGL"
+                        : option.toUpperCase()}
+                  </button>
+                ))}
+              </div>
             </div>
 
             <div className="demo-slider-grid">

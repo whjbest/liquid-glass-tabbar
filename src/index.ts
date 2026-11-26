@@ -1,5 +1,6 @@
 import "./styles.css";
 
+export { type GlLensParams, GlLensRenderer } from "./gl-lens";
 export { LiquidGlassTabBar } from "./liquid-glass-tab-bar";
 export { supportsSvgBackdropRefraction } from "./optics";
 export {
