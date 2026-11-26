@@ -14,6 +14,7 @@ import {
 import {
   createCapsuleRefractionFilter,
   type SdfRefractionHandle,
+  supportsSvgBackdropRefraction,
 } from "./optics";
 import {
   computeLiquidDeformation,
@@ -53,6 +54,9 @@ type DragSession = {
   value: string;
   timer: ReturnType<typeof setTimeout> | null;
 };
+
+const LENS_EXTRA_WIDTH = 16;
+const LENS_EXTRA_HEIGHT = 20;
 
 function DefaultSearchIcon() {
   return (
@@ -140,9 +144,11 @@ function renderTabVisual(item: LiquidGlassTabItem, useActiveIcon: boolean) {
 }
 
 /**
- * High-fidelity iOS 26 Liquid Glass TabBar engineered for React & WebKit
- * (iOS Safari / Telegram WKWebView), with physical Snell's Law RGB dispersion
- * enhancement on Chromium engines.
+ * High-fidelity iOS 26 Liquid Glass TabBar for React.
+ *
+ * Uses single-pass Snell's Law backdrop refraction on Chromium (refracting
+ * the TabBar's own top/bottom border edges, page background, and icons with
+ * zero ghosting) and GPU-composited clear glass + bevels on iOS WebKit.
  */
 export function LiquidGlassTabBar({
   items,
@@ -174,8 +180,6 @@ export function LiquidGlassTabBar({
   const searchCoreRef = useRef<HTMLDivElement>(null);
   const lensRef = useRef<HTMLDivElement>(null);
   const lensFillRef = useRef<HTMLDivElement>(null);
-  const portalRef = useRef<HTMLDivElement>(null);
-  const edgePortalRef = useRef<HTMLDivElement>(null);
 
   const layoutRef = useRef<TrackLayout | null>(null);
   const [hasLayout, setHasLayout] = useState(false);
@@ -183,6 +187,7 @@ export function LiquidGlassTabBar({
   const [dragHoverValue, setDragHoverValue] = useState<string | null>(null);
   const [searchPressed, setSearchPressed] = useState(false);
   const [focusedValue, setFocusedValue] = useState<string | null>(null);
+  const [svgLensActive, setSvgLensActive] = useState(false);
 
   const reducedMotionRef = useRef(false);
   const dragRef = useRef<DragSession | null>(null);
@@ -233,10 +238,8 @@ export function LiquidGlassTabBar({
   /** Writes the current spring physics state directly to GPU-composited DOM nodes. */
   const paintLens = useCallback(() => {
     const lensEl = lensRef.current;
-    const portalEl = portalRef.current;
-    const edgePortalEl = edgePortalRef.current;
     const layout = layoutRef.current;
-    if (!lensEl || !portalEl || !layout) return;
+    if (!lensEl || !layout) return;
 
     const firstItem = layout.items[0];
     if (!firstItem) return;
@@ -251,7 +254,6 @@ export function LiquidGlassTabBar({
     const baseH = firstItem.height;
     const cy = firstItem.centerY;
 
-    // Combine explicit press/drag lift with velocity-driven flight lift on tap jumps
     const flightLift =
       isLiquid && !reduced
         ? Math.min(0.92, Math.tanh(Math.abs(vx) / 700) * 0.98)
@@ -261,11 +263,10 @@ export function LiquidGlassTabBar({
         ? Math.min(1, Math.max(springLiftRef.current.value, flightLift))
         : 0;
 
-    // Generous convex droplet expansion protruding gracefully past the track rim
-    const extraW = lift * 14;
-    const extraH = lift * 18;
-    const w = baseW + extraW;
-    const h = baseH + extraH;
+    // Overhangs top & bottom edges of the track so the convex lens pulls in
+    // and refracts the TabBar's own borders + outside page color like iOS 26.
+    const w = baseW + lift * LENS_EXTRA_WIDTH;
+    const h = baseH + lift * LENS_EXTRA_HEIGHT;
     const x = cx - w / 2;
     const y = cy - h / 2;
 
@@ -279,29 +280,7 @@ export function LiquidGlassTabBar({
     lensEl.style.transform = `translate3d(${x.toFixed(2)}px, ${y.toFixed(2)}px, 0) scale3d(${scaleX.toFixed(4)}, ${scaleY.toFixed(4)}, 1)`;
     lensEl.style.setProperty("--lgtb-lift", lift.toFixed(4));
     lensEl.style.setProperty("--lgtb-light-x", lightOffset.toFixed(4));
-    lensEl.dataset.elevated = lift > 0.025 ? "true" : "false";
-
-    // Zone 1 (Core): crisp radial magnification centered on the droplet
-    const mag = 1 + lift * (Math.max(c.lensMagnification, 1) - 1);
-    const portalScaleX = mag / (1 + (scaleX - 1) * 0.65);
-    const portalScaleY = mag / (1 + (scaleY - 1) * 0.65);
-
-    portalEl.style.width = `${layout.width}px`;
-    portalEl.style.height = `${layout.height}px`;
-    portalEl.style.transformOrigin = `${cx.toFixed(2)}px ${cy.toFixed(2)}px`;
-    portalEl.style.transform = `translate3d(${(-x).toFixed(2)}px, ${(-y).toFixed(2)}px, 0) scale3d(${portalScaleX.toFixed(4)}, ${portalScaleY.toFixed(4)}, 1)`;
-
-    // Zone 2 (Outer 7px Meniscus Ring): stronger peripheral radial bend (1.32x)
-    // Creates visible convex rim refraction on iOS WKWebView as icons cross the edge.
-    if (edgePortalEl) {
-      const edgeMag = 1 + lift * (Math.max(c.lensMagnification, 1) - 1 + 0.16);
-      const edgeScaleX = edgeMag / (1 + (scaleX - 1) * 0.5);
-      const edgeScaleY = edgeMag / (1 + (scaleY - 1) * 0.5);
-      edgePortalEl.style.width = `${layout.width}px`;
-      edgePortalEl.style.height = `${layout.height}px`;
-      edgePortalEl.style.transformOrigin = `${cx.toFixed(2)}px ${cy.toFixed(2)}px`;
-      edgePortalEl.style.transform = `translate3d(${(-x).toFixed(2)}px, ${(-y).toFixed(2)}px, 0) scale3d(${edgeScaleX.toFixed(4)}, ${edgeScaleY.toFixed(4)}, 1)`;
-    }
+    lensEl.dataset.elevated = lift > 0.02 ? "true" : "false";
   }, []);
 
   const stopLoop = useCallback(() => {
@@ -337,7 +316,7 @@ export function LiquidGlassTabBar({
       const wParams = { response: 0.28, dampingFraction: 0.84 };
       const liftParams =
         targetLiftRef.current > springLiftRef.current.value
-          ? { response: 0.2, dampingFraction: 0.7 }
+          ? { response: 0.2, dampingFraction: 0.72 }
           : { response: 0.34, dampingFraction: 0.78 };
 
       springXRef.current = stepSpring(
@@ -480,16 +459,21 @@ export function LiquidGlassTabBar({
     }
   }, [activeIndex, paintLens, startLoop]);
 
-  // Progressive Chromium Snell's Law SDF + RGB dispersion filters
+  // Progressive Chromium Snell's Law SDF + pastel RGB dispersion filters
   // Attached to Track, Search circle, AND lifted Lens droplet (no-op on WebKit).
   useEffect(() => {
+    void itemsSignature;
+    void size;
     if (
       variant !== "liquid" ||
       !cfg.enableSvgRefraction ||
-      typeof document === "undefined"
+      typeof document === "undefined" ||
+      !supportsSvgBackdropRefraction()
     ) {
+      setSvgLensActive(false);
       return;
     }
+
     const track = trackRef.current;
     const trackCore = trackCoreRef.current;
     const searchEl = searchRef.current;
@@ -506,7 +490,7 @@ export function LiquidGlassTabBar({
       profile: "track" | "lens",
       blurOverride?: number,
     ) => {
-      if (!core || width <= 4 || height <= 4) return;
+      if (!core || width <= 4 || height <= 4) return false;
       const handle = createCapsuleRefractionFilter(document, {
         width,
         height,
@@ -519,14 +503,16 @@ export function LiquidGlassTabBar({
         core.style.setProperty(cssVarName, handle.filterUrl);
         core.dataset.svgRefract = "true";
         handles.push(handle);
-      } else {
-        delete core.dataset.svgRefract;
-        core.style.removeProperty(cssVarName);
+        return true;
       }
+      delete core.dataset.svgRefract;
+      core.style.removeProperty(cssVarName);
+      return false;
     };
 
     const rebuild = () => {
       for (const h of handles.splice(0)) h.destroy();
+      let lensOk = false;
       if (track) {
         const rect = track.getBoundingClientRect();
         attach(
@@ -536,15 +522,17 @@ export function LiquidGlassTabBar({
           "--lgtb-svg-filter",
           "track",
         );
-        const firstBox = layoutRef.current?.items[0];
-        if (firstBox) {
-          attach(
-            firstBox.width + 14,
-            firstBox.height + 18,
+        const firstButton = track.querySelector<HTMLButtonElement>(
+          "button[data-tab-bar-item]",
+        );
+        if (firstButton) {
+          lensOk = attach(
+            firstButton.offsetWidth + LENS_EXTRA_WIDTH,
+            firstButton.offsetHeight + LENS_EXTRA_HEIGHT,
             lensFill,
             "--lgtb-lens-svg-filter",
             "lens",
-            1.2,
+            0,
           );
         }
       }
@@ -558,6 +546,7 @@ export function LiquidGlassTabBar({
           "track",
         );
       }
+      setSvgLensActive(lensOk);
     };
 
     rebuild();
@@ -579,6 +568,7 @@ export function LiquidGlassTabBar({
       clearTimeout(timer);
       observer.disconnect();
       for (const h of handles) h.destroy();
+      setSvgLensActive(false);
       for (const [el, prop] of [
         [trackCore, "--lgtb-svg-filter"],
         [searchCore, "--lgtb-svg-filter"],
@@ -596,6 +586,8 @@ export function LiquidGlassTabBar({
     cfg.blur,
     cfg.refraction,
     cfg.chromaticAberration,
+    itemsSignature,
+    size,
   ]);
 
   const resolvePointerTrack = useCallback(
@@ -714,6 +706,13 @@ export function LiquidGlassTabBar({
     const index = Number(button.dataset.tabBarItem);
     const item = items[index];
     if (!item || item.disabled) return;
+
+    // Prevent mouse/touch presses from triggering a sticky white focus ring;
+    // keyboard Tab / Arrow navigation still receives full :focus-visible rings.
+    event.preventDefault();
+    if (document.activeElement instanceof HTMLElement) {
+      document.activeElement.blur();
+    }
 
     suppressClickRef.current = false;
     const session: DragSession = {
@@ -852,16 +851,11 @@ export function LiquidGlassTabBar({
     ["--lgtb-refraction" as string]: String(cfg.refraction),
     ["--lgtb-chroma" as string]: String(cfg.chromaticAberration),
     ["--lgtb-specular" as string]: String(cfg.specular),
+    ["--lgtb-lens-mag" as string]: String(cfg.lensMagnification),
     ...(cfg.tintOpacity !== undefined
       ? { ["--lgtb-surface-alpha" as string]: String(cfg.tintOpacity) }
       : {}),
   };
-
-  const portalItems = items.map((item) => (
-    <div key={item.value} className="lgtb-lens-portal-item">
-      {renderTabVisual(item, true)}
-    </div>
-  ));
 
   return (
     <nav
@@ -879,6 +873,7 @@ export function LiquidGlassTabBar({
         ref={trackRef}
         data-slot="tab-bar-list"
         data-elevated={elevated ? "true" : "false"}
+        data-svg-lens={svgLensActive ? "true" : "false"}
         className="lgtb-track"
         onPointerDown={handlePointerDown}
         onPointerMove={handlePointerMove}
@@ -905,6 +900,7 @@ export function LiquidGlassTabBar({
           </div>
           <div className="lgtb-glass-sheen" />
         </div>
+        {/* Track specular border stays at z-index: 1 so the lifted droplet refracts it */}
         <div aria-hidden="true" className="lgtb-specular" />
 
         {/* Interactive Tab Buttons */}
@@ -912,6 +908,7 @@ export function LiquidGlassTabBar({
           const isCurrent = item.value === value && !item.disabled;
           const isActiveVisual =
             item.value === displayedActiveValue && !item.disabled;
+          const isHeld = elevated && dragHoverValue === item.value;
           return (
             <button
               key={item.value}
@@ -919,6 +916,7 @@ export function LiquidGlassTabBar({
               disabled={item.disabled}
               data-tab-bar-item={index}
               data-active={isActiveVisual ? "true" : "false"}
+              data-held={isHeld ? "true" : "false"}
               aria-current={isCurrent ? "page" : undefined}
               tabIndex={index === rovingTabIndex ? 0 : -1}
               className="lgtb-item"
@@ -937,7 +935,7 @@ export function LiquidGlassTabBar({
           );
         })}
 
-        {/* Interactive Liquid Glass Lens Droplet + Dual-Zone Convex Portal */}
+        {/* Interactive Liquid Glass Lens Droplet (Single-Pass, Zero Ghosting) */}
         <div
           ref={lensRef}
           aria-hidden="true"
@@ -953,18 +951,6 @@ export function LiquidGlassTabBar({
           <div className="lgtb-lens-clip">
             <div className="lgtb-lens-rest-fill" />
             <div ref={lensFillRef} className="lgtb-lens-liquid-fill" />
-            <div
-              ref={portalRef}
-              data-slot="tab-bar-lens-mirror"
-              className="lgtb-lens-portal"
-            >
-              {portalItems}
-            </div>
-            <div className="lgtb-lens-edge-mask">
-              <div ref={edgePortalRef} className="lgtb-lens-edge-portal">
-                {portalItems}
-              </div>
-            </div>
             <div className="lgtb-lens-meniscus" />
             <div className="lgtb-lens-rim" />
           </div>
@@ -994,7 +980,8 @@ export function LiquidGlassTabBar({
             aria-label={search.label ?? "Search"}
             aria-pressed={search.active ? "true" : undefined}
             className="lgtb-search-btn"
-            onPointerDown={() => {
+            onPointerDown={(event) => {
+              event.preventDefault();
               setSearchPressed(true);
               onHaptic?.("press");
             }}

@@ -28,7 +28,6 @@ describe("LiquidGlassTabBar markup & DOM contract", () => {
     expect(html).toContain('data-slot="tab-bar"');
     expect(html).toContain('data-slot="tab-bar-list"');
     expect(html).toContain('data-slot="tab-bar-indicator"');
-    expect(html).toContain('data-slot="tab-bar-lens-mirror"');
     expect(html).toContain('data-slot="tab-bar-search"');
     expect(html).toContain('data-appearance="dark"');
     expect(html).toContain('aria-current="page"');

@@ -489,10 +489,10 @@ export function App() {
               <Slider
                 label="Glass Tint Opacity"
                 value={
-                  config.tintOpacity ?? (appearance === "dark" ? 0.18 : 0.22)
+                  config.tintOpacity ?? (appearance === "dark" ? 0.42 : 0.68)
                 }
-                min={0.04}
-                max={0.55}
+                min={0.08}
+                max={0.85}
                 step={0.02}
                 onChange={(v) => updateConfig("tintOpacity", v)}
               />

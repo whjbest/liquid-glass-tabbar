@@ -1,13 +1,12 @@
 /**
- * Physical Liquid Glass Optics Engine
+ * Physical Liquid Glass Optics Engine (v0.3)
  *
- * 1. Chromium engines: Generates true Snell's Law convex-squircle SDF
- *    displacement maps (`n = 1.52`) + 3-channel RGB chromatic dispersion
- *    SVG `<filter>` graphs for live `backdrop-filter: url(#...)` pixel bending
- *    on the track, search circle, and lifted liquid lens droplet.
- * 2. AppleWebKit (iOS Safari / Telegram WKWebView): Excludes unsupported SVG
- *    backdrop filters (WebKit #245510) and pairs with the GPU-composited
- *    clear chamber, Fresnel bevels, and Dual-Zone Optical Portal Lens.
+ * Calibrated directly against native iOS 26 UITabBar Liquid Glass:
+ * - Track: gentle convex bevel refraction along the floating pill perimeter.
+ * - Lifted Droplet ("lens"): crystal-clear zero-blur center with smooth
+ *   Snell's Law peripheral bending and delicate pastel RGB prism dispersion,
+ *   refracting the TabBar's own top/bottom edges, outside page background,
+ *   and tab icons in a single optical pass (zero ghosting).
  */
 
 let cachedSvgBackdropSupport: boolean | undefined;
@@ -16,6 +15,8 @@ let filterCounter = 0;
 /**
  * Detects whether the current engine genuinely paints SVG filters inside
  * CSS `backdrop-filter: url(#...)`.
+ * AppleWebKit (iOS Safari / WKWebView) parses the syntax but does not paint
+ * SVG backdrop filters (WebKit #245510).
  */
 export function supportsSvgBackdropRefraction(): boolean {
   if (cachedSvgBackdropSupport !== undefined) return cachedSvgBackdropSupport;
@@ -55,36 +56,35 @@ function capsuleSdf(
 }
 
 /**
- * Convex squircle glass surface profile `h(t) = (1 - (1 - t)^4)^(1/4)`
- * evaluated through Snell's Law (`n1 * sin(theta_i) = n2 * sin(theta_t)`)
- * to compute physically accurate lateral ray deflection near the glass rim.
+ * Smooth C2 convex squircle surface profile passed through Snell's Law
+ * (`n1 * sin(theta_i) = n2 * sin(theta_t)`) to compute physically accurate
+ * inward ray deflection near the curved glass rim.
  */
 function snellDeflection(
   depthFromEdge: number,
   bevelWidth: number,
-  ior = 1.52,
+  ior = 1.48,
 ): number {
   const t = Math.max(
-    0.015,
+    0.02,
     Math.min(1, depthFromEdge / Math.max(bevelWidth, 1)),
   );
   if (t >= 1) return 0;
 
-  // Derivative dh/dt of convex squircle profile
+  // Smoothstep-damped squircle slope avoids harsh pixel stepping at the very edge
   const u = 1 - t;
   const u3 = u * u * u;
   const u4 = u3 * u;
-  const slope = u3 / Math.max((1 - u4) ** 0.75, 0.08);
+  const slope = u3 / Math.max((1 - u4) ** 0.75, 0.14);
 
-  // Clamp incidence angle below total internal reflection (~74 deg)
-  const thetaI = Math.min(Math.atan(slope * 1.65), 1.29);
-  const sinThetaT = Math.min(Math.sin(thetaI) / ior, 0.99);
+  const thetaI = Math.min(Math.atan(slope * 1.45), 1.24);
+  const sinThetaT = Math.min(Math.sin(thetaI) / ior, 0.98);
   const thetaT = Math.asin(sinThetaT);
   const deflectionAngle = thetaI - thetaT;
 
-  // Lateral ray shift scales smoothly to 0 in the flat interior
-  const edgeFalloff = (1 - t) ** 0.65;
-  return Math.tan(deflectionAngle) * edgeFalloff;
+  // Smooth C1 cubic falloff into the flat crystal core
+  const falloff = u * u * (3 - 2 * u);
+  return Math.tan(deflectionAngle) * falloff;
 }
 
 export type SdfRefractionOptions = {
@@ -93,7 +93,7 @@ export type SdfRefractionOptions = {
   blur: number;
   refraction: number;
   chromaticAberration: number;
-  /** Optical profile: "track" (flat core + wide curved rim) or "lens" (full convex dome). */
+  /** "track" for the base floating capsule; "lens" for the elevated droplet. */
   profile?: "track" | "lens";
 };
 
@@ -103,8 +103,9 @@ export type SdfRefractionHandle = {
 };
 
 /**
- * Generates a physical Snell's Law SDF displacement map + 3-channel RGB
- * chromatic dispersion SVG filter for Chromium live backdrop refraction.
+ * Generates a high-precision Snell's Law SDF displacement map + delicate
+ * 3-channel pastel RGB dispersion SVG `<filter>` for Chromium live backdrop
+ * refraction.
  */
 export function createCapsuleRefractionFilter(
   ownerDocument: Document,
@@ -122,7 +123,7 @@ export function createCapsuleRefractionFilter(
   if (width <= 4 || height <= 4 || refraction <= 0.01) return null;
   if (!supportsSvgBackdropRefraction()) return null;
 
-  const scale = Math.min(2, 560 / Math.max(width, height));
+  const scale = Math.min(2, 640 / Math.max(width, height));
   const cw = Math.max(4, Math.ceil(width * scale));
   const ch = Math.max(4, Math.ceil(height * scale));
   const canvas = ownerDocument.createElement("canvas");
@@ -132,14 +133,13 @@ export function createCapsuleRefractionFilter(
   if (!ctx) return null;
 
   const radius = Math.min(width, height) / 2;
-  // Wide enough bevel so curved edge refraction is unmistakably visible
+  // Lens uses a refined ~26% peripheral bevel so the center stays razor-sharp
+  // while the top, bottom, and rounded ends smoothly pull in & bend edges.
   const bevel =
     profile === "lens"
-      ? Math.min(width, height) * 0.48
-      : Math.min(22, Math.min(width, height) * 0.36);
+      ? Math.min(20, Math.min(width, height) * 0.28)
+      : Math.min(18, Math.min(width, height) * 0.3);
 
-  // Precompute unnormalized displacement vector field so we can normalize
-  // cleanly to full 8-bit dynamic range (maximizing precision without clipping).
   const fieldX = new Float32Array(cw * ch);
   const fieldY = new Float32Array(cw * ch);
   let maxMag = 0.0001;
@@ -164,14 +164,13 @@ export function createCapsuleRefractionFilter(
             capsuleSdf(x, y + 0.5, width, height, radius) -
             capsuleSdf(x, y - 0.5, width, height, radius);
           const len = Math.hypot(gx, gy) || 1;
-          const mag = snellDeflection(depth, bevel, 1.52);
-          // Inward normal bends background rays toward capsule interior
+          const mag = snellDeflection(depth, bevel, 1.48);
           dx = (-gx / len) * mag;
           dy = (-gy / len) * mag;
         }
 
-        // Subtle convex lens dome magnification across the core (stronger on lifted droplet)
-        const domeStrength = profile === "lens" ? 0.24 : 0.045;
+        // Subtle convex magnification across the lens dome (keeps icons sharp & natural)
+        const domeStrength = profile === "lens" ? 0.11 : 0.03;
         const nx = (x - width / 2) / Math.max(width / 2, 1);
         const ny = (y - height / 2) / Math.max(height / 2, 1);
         dx += -nx * domeStrength;
@@ -210,12 +209,18 @@ export function createCapsuleRefractionFilter(
 
   const id = `lgtb-snell-${++filterCounter}`;
 
-  // Strong physical pixel displacement (18–46px at high refraction)
+  // Calibrated displacement: bold enough to visibly pull & curve the TabBar's
+  // top/bottom edge into the overhanging meniscus, while staying silky smooth.
   const baseScale =
-    (profile === "lens" ? 36 : 44) * Math.max(0, Math.min(1.5, refraction));
-  // Keep pre-blur very light so bent edges & curved text stay razor-recognizable
-  const stdDev = Math.max(0, blur * 0.28);
-  const dispersionSpread = Math.max(0, Math.min(1, chromaticAberration)) * 0.14;
+    (profile === "lens" ? 28 : 34) * Math.max(0, Math.min(1.5, refraction));
+  // Lifted lens keeps near-zero blur so text inside the droplet stays razor-sharp
+  const stdDev =
+    profile === "lens" ? Math.max(0, blur * 0.08) : Math.max(0, blur * 0.28);
+
+  // Delicate pastel prism dispersion (~2.5–3.5px max R-to-B spread, like iOS 26)
+  const dispersionSpread =
+    Math.max(0, Math.min(1, chromaticAberration)) *
+    (profile === "lens" ? 0.065 : 0.055);
   const scaleR = (baseScale * (1 - dispersionSpread)).toFixed(2);
   const scaleG = baseScale.toFixed(2);
   const scaleB = (baseScale * (1 + dispersionSpread)).toFixed(2);
@@ -235,12 +240,11 @@ export function createCapsuleRefractionFilter(
   filter.setAttribute("color-interpolation-filters", "sRGB");
 
   const blurStep =
-    stdDev > 0.08
+    stdDev > 0.06
       ? `<feGaussianBlur in="SourceGraphic" stdDeviation="${stdDev.toFixed(2)}" result="src"/>`
       : `<feOffset in="SourceGraphic" dx="0" dy="0" result="src"/>`;
 
-  if (dispersionSpread > 0.005) {
-    // True 3-channel RGB prism dispersion: Red, Green, and Blue refract at staggered IOR scales
+  if (dispersionSpread > 0.004) {
     filter.innerHTML = [
       blurStep,
       `<feImage href="${dataUri}" x="0" y="0" width="${width}" height="${height}" preserveAspectRatio="none" result="map"/>`,
