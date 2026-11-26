@@ -197,9 +197,11 @@ export function LiquidGlassTabBar({
   const springXRef = useRef<SpringState>({ value: 0, velocity: 0 });
   const springWRef = useRef<SpringState>({ value: 0, velocity: 0 });
   const springLiftRef = useRef<SpringState>({ value: 0, velocity: 0 });
+  const springPressRef = useRef<SpringState>({ value: 0, velocity: 0 });
   const targetXRef = useRef(0);
   const targetWRef = useRef(0);
   const targetLiftRef = useRef(0);
+  const targetPressRef = useRef(0);
   const overshootRef = useRef(0);
   const initializedRef = useRef(false);
   const rafRef = useRef<number>(0);
@@ -237,6 +239,7 @@ export function LiquidGlassTabBar({
 
   /** Writes the current spring physics state directly to GPU-composited DOM nodes. */
   const paintLens = useCallback(() => {
+    const trackEl = trackRef.current;
     const lensEl = lensRef.current;
     const layout = layoutRef.current;
     if (!lensEl || !layout) return;
@@ -247,6 +250,12 @@ export function LiquidGlassTabBar({
     const c = cfgRef.current;
     const isLiquid = variantRef.current === "liquid";
     const reduced = reducedMotionRef.current;
+
+    // Gentle iOS-native track breath scale on press with elastic rebound on release
+    if (trackEl) {
+      const press = isLiquid && !reduced ? springPressRef.current.value : 0;
+      trackEl.style.setProperty("--lgtb-press", press.toFixed(4));
+    }
 
     const cx = springXRef.current.value;
     const vx = springXRef.current.velocity;
@@ -260,7 +269,10 @@ export function LiquidGlassTabBar({
         : 0;
     const lift =
       isLiquid && !reduced
-        ? Math.min(1, Math.max(springLiftRef.current.value, flightLift))
+        ? Math.min(
+            1.12,
+            Math.max(0, Math.max(springLiftRef.current.value, flightLift)),
+          )
         : 0;
 
     // Overhangs top & bottom edges of the track so the convex lens pulls in
@@ -275,12 +287,14 @@ export function LiquidGlassTabBar({
         ? computeLiquidDeformation(vx, overshootRef.current, c.squishIntensity)
         : { scaleX: 1, scaleY: 1, lightOffset: 0 };
 
+    const clampedOpacityLift = Math.min(1, Math.max(0, lift));
+
     lensEl.style.width = `${w.toFixed(2)}px`;
     lensEl.style.height = `${h.toFixed(2)}px`;
     lensEl.style.transform = `translate3d(${x.toFixed(2)}px, ${y.toFixed(2)}px, 0) scale3d(${scaleX.toFixed(4)}, ${scaleY.toFixed(4)}, 1)`;
-    lensEl.style.setProperty("--lgtb-lift", lift.toFixed(4));
+    lensEl.style.setProperty("--lgtb-lift", clampedOpacityLift.toFixed(4));
     lensEl.style.setProperty("--lgtb-light-x", lightOffset.toFixed(4));
-    lensEl.dataset.elevated = lift > 0.02 ? "true" : "false";
+    lensEl.dataset.elevated = clampedOpacityLift > 0.02 ? "true" : "false";
   }, []);
 
   const stopLoop = useCallback(() => {
@@ -305,6 +319,7 @@ export function LiquidGlassTabBar({
         springXRef.current = { value: targetXRef.current, velocity: 0 };
         springWRef.current = { value: targetWRef.current, velocity: 0 };
         springLiftRef.current = { value: targetLiftRef.current, velocity: 0 };
+        springPressRef.current = { value: targetPressRef.current, velocity: 0 };
         paintLens();
         rafRef.current = 0;
         return;
@@ -314,10 +329,15 @@ export function LiquidGlassTabBar({
         ? { response: 0.11, dampingFraction: 0.88 }
         : { response: c.springResponse, dampingFraction: c.springDamping };
       const wParams = { response: 0.28, dampingFraction: 0.84 };
+      // Underdamped release spring gives the iconic iOS 26 elastic snap-back
       const liftParams =
         targetLiftRef.current > springLiftRef.current.value
-          ? { response: 0.2, dampingFraction: 0.72 }
-          : { response: 0.34, dampingFraction: 0.78 };
+          ? { response: 0.22, dampingFraction: 0.72 }
+          : { response: 0.36, dampingFraction: 0.66 };
+      const pressParams =
+        targetPressRef.current > springPressRef.current.value
+          ? { response: 0.24, dampingFraction: 0.76 }
+          : { response: 0.36, dampingFraction: 0.62 };
 
       springXRef.current = stepSpring(
         springXRef.current,
@@ -337,6 +357,12 @@ export function LiquidGlassTabBar({
         dt,
         liftParams,
       );
+      springPressRef.current = stepSpring(
+        springPressRef.current,
+        targetPressRef.current,
+        dt,
+        pressParams,
+      );
 
       paintLens();
 
@@ -349,12 +375,19 @@ export function LiquidGlassTabBar({
           targetLiftRef.current,
           0.004,
           0.02,
+        ) &&
+        isSpringSettled(
+          springPressRef.current,
+          targetPressRef.current,
+          0.004,
+          0.02,
         );
 
       if (settled) {
         springXRef.current = { value: targetXRef.current, velocity: 0 };
         springWRef.current = { value: targetWRef.current, velocity: 0 };
         springLiftRef.current = { value: targetLiftRef.current, velocity: 0 };
+        springPressRef.current = { value: targetPressRef.current, velocity: 0 };
         overshootRef.current = 0;
         paintLens();
         rafRef.current = 0;
@@ -645,6 +678,7 @@ export function LiquidGlassTabBar({
     dragRef.current = null;
     overshootRef.current = 0;
     targetLiftRef.current = 0;
+    targetPressRef.current = 0;
     setElevated(false);
     setDragHoverValue(null);
 
@@ -692,6 +726,7 @@ export function LiquidGlassTabBar({
     }
 
     targetLiftRef.current = 1;
+    targetPressRef.current = 1;
     setElevated(true);
     onHaptic?.("press");
     startLoop();
@@ -726,9 +761,16 @@ export function LiquidGlassTabBar({
     };
     dragRef.current = session;
 
+    // Immediately breathe the track outward and begin clearing the lens on touch-down
+    targetPressRef.current = 1;
+    if (item.value === value) {
+      targetLiftRef.current = 0.72;
+    }
+    startLoop();
+
     session.timer = setTimeout(() => {
       if (dragRef.current === session) activateDrag();
-    }, 115);
+    }, 95);
   };
 
   const handlePointerMove = (event: PointerEvent<HTMLDivElement>) => {
@@ -783,6 +825,7 @@ export function LiquidGlassTabBar({
       dragRef.current = null;
       overshootRef.current = 0;
       targetLiftRef.current = 0;
+      targetPressRef.current = 0;
       setElevated(false);
       setDragHoverValue(null);
 
@@ -803,6 +846,9 @@ export function LiquidGlassTabBar({
 
     if (session.timer) clearTimeout(session.timer);
     dragRef.current = null;
+    targetPressRef.current = 0;
+    targetLiftRef.current = 0;
+    startLoop();
   };
 
   const handleKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {

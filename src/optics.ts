@@ -133,11 +133,12 @@ export function createCapsuleRefractionFilter(
   if (!ctx) return null;
 
   const radius = Math.min(width, height) / 2;
-  // Lens uses a refined ~26% peripheral bevel so the center stays razor-sharp
-  // while the top, bottom, and rounded ends smoothly pull in & bend edges.
+  // Lens uses a crisp ~24% peripheral bevel so the flat crystal center stays
+  // 100% razor-sharp (zero chromatic ghosting on icons/labels) while the curved
+  // rim smoothly bends & disperses the TabBar edges and crossing graphics.
   const bevel =
     profile === "lens"
-      ? Math.min(20, Math.min(width, height) * 0.28)
+      ? Math.min(18, Math.min(width, height) * 0.25)
       : Math.min(18, Math.min(width, height) * 0.3);
 
   const fieldX = new Float32Array(cw * ch);
@@ -169,12 +170,14 @@ export function createCapsuleRefractionFilter(
           dy = (-gy / len) * mag;
         }
 
-        // Subtle convex magnification across the lens dome (keeps icons sharp & natural)
-        const domeStrength = profile === "lens" ? 0.11 : 0.03;
-        const nx = (x - width / 2) / Math.max(width / 2, 1);
-        const ny = (y - height / 2) / Math.max(height / 2, 1);
-        dx += -nx * domeStrength;
-        dy += -ny * domeStrength;
+        // Track keeps a whisper-light core dome; lens center stays strictly 0-shift
+        // so icons & labels inside the lifted droplet are crystal sharp.
+        if (profile === "track") {
+          const nx = (x - width / 2) / Math.max(width / 2, 1);
+          const ny = (y - height / 2) / Math.max(height / 2, 1);
+          dx += -nx * 0.025;
+          dy += -ny * 0.025;
+        }
       }
 
       fieldX[idx] = dx;
@@ -213,14 +216,13 @@ export function createCapsuleRefractionFilter(
   // top/bottom edge into the overhanging meniscus, while staying silky smooth.
   const baseScale =
     (profile === "lens" ? 28 : 34) * Math.max(0, Math.min(1.5, refraction));
-  // Lifted lens keeps near-zero blur so text inside the droplet stays razor-sharp
-  const stdDev =
-    profile === "lens" ? Math.max(0, blur * 0.08) : Math.max(0, blur * 0.28);
+  // Lifted lens keeps strict 0 blur so content transitions to crystal-clear on press
+  const stdDev = profile === "lens" ? 0 : Math.max(0, blur * 0.28);
 
-  // Delicate pastel prism dispersion (~2.5–3.5px max R-to-B spread, like iOS 26)
+  // Delicate pastel prism dispersion strictly along the outer curved bevel
   const dispersionSpread =
     Math.max(0, Math.min(1, chromaticAberration)) *
-    (profile === "lens" ? 0.065 : 0.055);
+    (profile === "lens" ? 0.055 : 0.05);
   const scaleR = (baseScale * (1 - dispersionSpread)).toFixed(2);
   const scaleG = baseScale.toFixed(2);
   const scaleB = (baseScale * (1 + dispersionSpread)).toFixed(2);
