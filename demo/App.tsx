@@ -193,8 +193,8 @@ export function App() {
   const engineLabel = useMemo(
     () =>
       supportsSvgBackdropRefraction()
-        ? "Chromium SDF + GPU Rim"
-        : "WebKit GPU Rim + Portal Lens",
+        ? "Snell SDF + RGB Dispersion"
+        : "WebKit Clear Rim + Dual-Zone Lens",
     [],
   );
 
@@ -279,7 +279,22 @@ export function App() {
         <div className="demo-card">
           <div className="demo-card-head">
             <span className="demo-card-tag" style={{ color: "#38bdf8" }}>
-              OPTICAL REFRACTION TEST STRIP
+              SNELL REFRACTION GRID
+            </span>
+            <span className="demo-card-stat">
+              Scroll straight lines under bar
+            </span>
+          </div>
+          <div className="demo-optical-grid">
+            <span>Watch grid lines bend at the glass edge</span>
+            <span>IOR 1.52</span>
+          </div>
+        </div>
+
+        <div className="demo-card">
+          <div className="demo-card-head">
+            <span className="demo-card-tag" style={{ color: "#f472b6" }}>
+              COLOR DISPERSION SWATCHES
             </span>
             <span className="demo-card-stat">Scroll under dock</span>
           </div>
@@ -463,30 +478,42 @@ export function App() {
 
             <div className="demo-slider-grid">
               <Slider
-                label="Interior Blur"
+                label="Interior Blur (Lower = Clearer)"
                 value={config.blur ?? LIQUID_GLASS_DEFAULTS.blur}
-                min={4}
-                max={28}
+                min={0}
+                max={16}
                 step={0.5}
                 unit="px"
                 onChange={(v) => updateConfig("blur", v)}
               />
               <Slider
-                label="Refractive Rim Blur"
-                value={config.rimBlur ?? LIQUID_GLASS_DEFAULTS.rimBlur}
-                min={0.5}
-                max={6}
-                step={0.25}
-                unit="px"
-                onChange={(v) => updateConfig("rimBlur", v)}
+                label="Glass Tint Opacity"
+                value={
+                  config.tintOpacity ?? (appearance === "dark" ? 0.18 : 0.22)
+                }
+                min={0.04}
+                max={0.55}
+                step={0.02}
+                onChange={(v) => updateConfig("tintOpacity", v)}
               />
               <Slider
-                label="Refraction & Chromatic Fringe"
+                label="Snell Refraction Strength"
                 value={config.refraction ?? LIQUID_GLASS_DEFAULTS.refraction}
+                min={0}
+                max={1.3}
+                step={0.05}
+                onChange={(v) => updateConfig("refraction", v)}
+              />
+              <Slider
+                label="RGB Chromatic Dispersion"
+                value={
+                  config.chromaticAberration ??
+                  LIQUID_GLASS_DEFAULTS.chromaticAberration
+                }
                 min={0}
                 max={1}
                 step={0.05}
-                onChange={(v) => updateConfig("refraction", v)}
+                onChange={(v) => updateConfig("chromaticAberration", v)}
               />
               <Slider
                 label="Specular Fresnel Bevel"
@@ -503,7 +530,7 @@ export function App() {
                   LIQUID_GLASS_DEFAULTS.lensMagnification
                 }
                 min={1}
-                max={1.32}
+                max={1.35}
                 step={0.02}
                 unit="x"
                 onChange={(v) => updateConfig("lensMagnification", v)}

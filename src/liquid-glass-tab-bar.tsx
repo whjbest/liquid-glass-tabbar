@@ -141,7 +141,8 @@ function renderTabVisual(item: LiquidGlassTabItem, useActiveIcon: boolean) {
 
 /**
  * High-fidelity iOS 26 Liquid Glass TabBar engineered for React & WebKit
- * (iOS Safari / Telegram WKWebView), with optional Chromium SDF enhancement.
+ * (iOS Safari / Telegram WKWebView), with physical Snell's Law RGB dispersion
+ * enhancement on Chromium engines.
  */
 export function LiquidGlassTabBar({
   items,
@@ -172,7 +173,9 @@ export function LiquidGlassTabBar({
   const searchRef = useRef<HTMLDivElement>(null);
   const searchCoreRef = useRef<HTMLDivElement>(null);
   const lensRef = useRef<HTMLDivElement>(null);
+  const lensFillRef = useRef<HTMLDivElement>(null);
   const portalRef = useRef<HTMLDivElement>(null);
+  const edgePortalRef = useRef<HTMLDivElement>(null);
 
   const layoutRef = useRef<TrackLayout | null>(null);
   const [hasLayout, setHasLayout] = useState(false);
@@ -216,7 +219,6 @@ export function LiquidGlassTabBar({
   const displayedActiveValue = dragHoverValue ?? value;
   const showLens = hasLayout && (activeIndex >= 0 || dragHoverValue !== null);
 
-  // Sync reduced motion preference
   useEffect(() => {
     if (typeof window === "undefined" || !window.matchMedia) return;
     const mq = window.matchMedia("(prefers-reduced-motion: reduce)");
@@ -228,10 +230,11 @@ export function LiquidGlassTabBar({
     return () => mq.removeEventListener("change", onChange);
   }, []);
 
-  /** Writes the current spring physics state directly to the GPU-composited DOM nodes. */
+  /** Writes the current spring physics state directly to GPU-composited DOM nodes. */
   const paintLens = useCallback(() => {
     const lensEl = lensRef.current;
     const portalEl = portalRef.current;
+    const edgePortalEl = edgePortalRef.current;
     const layout = layoutRef.current;
     if (!lensEl || !portalEl || !layout) return;
 
@@ -251,15 +254,16 @@ export function LiquidGlassTabBar({
     // Combine explicit press/drag lift with velocity-driven flight lift on tap jumps
     const flightLift =
       isLiquid && !reduced
-        ? Math.min(0.9, Math.tanh(Math.abs(vx) / 760) * 0.96)
+        ? Math.min(0.92, Math.tanh(Math.abs(vx) / 700) * 0.98)
         : 0;
     const lift =
       isLiquid && !reduced
         ? Math.min(1, Math.max(springLiftRef.current.value, flightLift))
         : 0;
 
-    const extraW = lift * 12;
-    const extraH = lift * 14;
+    // Generous convex droplet expansion protruding gracefully past the track rim
+    const extraW = lift * 14;
+    const extraH = lift * 18;
     const w = baseW + extraW;
     const h = baseH + extraH;
     const x = cx - w / 2;
@@ -277,7 +281,7 @@ export function LiquidGlassTabBar({
     lensEl.style.setProperty("--lgtb-light-x", lightOffset.toFixed(4));
     lensEl.dataset.elevated = lift > 0.025 ? "true" : "false";
 
-    // Counter-translate & radially magnify the optical portal mirror around droplet center
+    // Zone 1 (Core): crisp radial magnification centered on the droplet
     const mag = 1 + lift * (Math.max(c.lensMagnification, 1) - 1);
     const portalScaleX = mag / (1 + (scaleX - 1) * 0.65);
     const portalScaleY = mag / (1 + (scaleY - 1) * 0.65);
@@ -286,6 +290,18 @@ export function LiquidGlassTabBar({
     portalEl.style.height = `${layout.height}px`;
     portalEl.style.transformOrigin = `${cx.toFixed(2)}px ${cy.toFixed(2)}px`;
     portalEl.style.transform = `translate3d(${(-x).toFixed(2)}px, ${(-y).toFixed(2)}px, 0) scale3d(${portalScaleX.toFixed(4)}, ${portalScaleY.toFixed(4)}, 1)`;
+
+    // Zone 2 (Outer 7px Meniscus Ring): stronger peripheral radial bend (1.32x)
+    // Creates visible convex rim refraction on iOS WKWebView as icons cross the edge.
+    if (edgePortalEl) {
+      const edgeMag = 1 + lift * (Math.max(c.lensMagnification, 1) - 1 + 0.16);
+      const edgeScaleX = edgeMag / (1 + (scaleX - 1) * 0.5);
+      const edgeScaleY = edgeMag / (1 + (scaleY - 1) * 0.5);
+      edgePortalEl.style.width = `${layout.width}px`;
+      edgePortalEl.style.height = `${layout.height}px`;
+      edgePortalEl.style.transformOrigin = `${cx.toFixed(2)}px ${cy.toFixed(2)}px`;
+      edgePortalEl.style.transform = `translate3d(${(-x).toFixed(2)}px, ${(-y).toFixed(2)}px, 0) scale3d(${edgeScaleX.toFixed(4)}, ${edgeScaleY.toFixed(4)}, 1)`;
+    }
   }, []);
 
   const stopLoop = useCallback(() => {
@@ -315,14 +331,13 @@ export function LiquidGlassTabBar({
         return;
       }
 
-      // Snappier follow while dragging under thumb; SwiftUI spring when snapping on tap/release
       const xParams = dragging
         ? { response: 0.11, dampingFraction: 0.88 }
         : { response: c.springResponse, dampingFraction: c.springDamping };
       const wParams = { response: 0.28, dampingFraction: 0.84 };
       const liftParams =
         targetLiftRef.current > springLiftRef.current.value
-          ? { response: 0.22, dampingFraction: 0.72 }
+          ? { response: 0.2, dampingFraction: 0.7 }
           : { response: 0.34, dampingFraction: 0.78 };
 
       springXRef.current = stepSpring(
@@ -375,7 +390,6 @@ export function LiquidGlassTabBar({
 
   useEffect(() => () => stopLoop(), [stopLoop]);
 
-  // Measure track and tab buttons whenever layout or items change
   const itemsSignature = items
     .map((item) => `${item.value}:${Boolean(item.disabled)}`)
     .join("\0");
@@ -440,7 +454,6 @@ export function LiquidGlassTabBar({
     };
   }, [itemsSignature, size, measure]);
 
-  // Animate lens whenever active tab changes externally or by tap
   useLayoutEffect(() => {
     const layout = layoutRef.current;
     if (!layout || dragRef.current?.active) return;
@@ -467,7 +480,8 @@ export function LiquidGlassTabBar({
     }
   }, [activeIndex, paintLens, startLoop]);
 
-  // Progressive Chromium SDF refraction filter (no-op on AppleWebKit / iOS)
+  // Progressive Chromium Snell's Law SDF + RGB dispersion filters
+  // Attached to Track, Search circle, AND lifted Lens droplet (no-op on WebKit).
   useEffect(() => {
     if (
       variant !== "liquid" ||
@@ -480,33 +494,70 @@ export function LiquidGlassTabBar({
     const trackCore = trackCoreRef.current;
     const searchEl = searchRef.current;
     const searchCore = searchCoreRef.current;
+    const lensFill = lensFillRef.current;
 
     const handles: SdfRefractionHandle[] = [];
 
-    const attach = (host: HTMLElement | null, core: HTMLElement | null) => {
-      if (!host || !core) return;
-      const rect = host.getBoundingClientRect();
-      const handle = createCapsuleRefractionFilter(
-        document,
-        rect.width,
-        rect.height,
-        cfg.blur,
-        cfg.refraction,
-      );
+    const attach = (
+      width: number,
+      height: number,
+      core: HTMLElement | null,
+      cssVarName: string,
+      profile: "track" | "lens",
+      blurOverride?: number,
+    ) => {
+      if (!core || width <= 4 || height <= 4) return;
+      const handle = createCapsuleRefractionFilter(document, {
+        width,
+        height,
+        blur: blurOverride ?? cfg.blur,
+        refraction: cfg.refraction,
+        chromaticAberration: cfg.chromaticAberration,
+        profile,
+      });
       if (handle) {
-        core.style.setProperty("--lgtb-svg-filter", handle.filterUrl);
+        core.style.setProperty(cssVarName, handle.filterUrl);
         core.dataset.svgRefract = "true";
         handles.push(handle);
       } else {
         delete core.dataset.svgRefract;
-        core.style.removeProperty("--lgtb-svg-filter");
+        core.style.removeProperty(cssVarName);
       }
     };
 
     const rebuild = () => {
       for (const h of handles.splice(0)) h.destroy();
-      attach(track, trackCore);
-      attach(searchEl, searchCore);
+      if (track) {
+        const rect = track.getBoundingClientRect();
+        attach(
+          rect.width,
+          rect.height,
+          trackCore,
+          "--lgtb-svg-filter",
+          "track",
+        );
+        const firstBox = layoutRef.current?.items[0];
+        if (firstBox) {
+          attach(
+            firstBox.width + 14,
+            firstBox.height + 18,
+            lensFill,
+            "--lgtb-lens-svg-filter",
+            "lens",
+            1.2,
+          );
+        }
+      }
+      if (searchEl) {
+        const rect = searchEl.getBoundingClientRect();
+        attach(
+          rect.width,
+          rect.height,
+          searchCore,
+          "--lgtb-svg-filter",
+          "track",
+        );
+      }
     };
 
     rebuild();
@@ -519,7 +570,7 @@ export function LiquidGlassTabBar({
     let timer: ReturnType<typeof setTimeout> | undefined;
     const observer = new ResizeObserver(() => {
       clearTimeout(timer);
-      timer = setTimeout(rebuild, 120);
+      timer = setTimeout(rebuild, 100);
     });
     if (track) observer.observe(track);
     if (searchEl) observer.observe(searchEl);
@@ -528,18 +579,25 @@ export function LiquidGlassTabBar({
       clearTimeout(timer);
       observer.disconnect();
       for (const h of handles) h.destroy();
-      if (trackCore) {
-        delete trackCore.dataset.svgRefract;
-        trackCore.style.removeProperty("--lgtb-svg-filter");
-      }
-      if (searchCore) {
-        delete searchCore.dataset.svgRefract;
-        searchCore.style.removeProperty("--lgtb-svg-filter");
+      for (const [el, prop] of [
+        [trackCore, "--lgtb-svg-filter"],
+        [searchCore, "--lgtb-svg-filter"],
+        [lensFill, "--lgtb-lens-svg-filter"],
+      ] as const) {
+        if (el) {
+          delete el.dataset.svgRefract;
+          el.style.removeProperty(prop);
+        }
       }
     };
-  }, [variant, cfg.enableSvgRefraction, cfg.blur, cfg.refraction]);
+  }, [
+    variant,
+    cfg.enableSvgRefraction,
+    cfg.blur,
+    cfg.refraction,
+    cfg.chromaticAberration,
+  ]);
 
-  /** Maps a horizontal pointer coordinate to the nearest enabled tab and resisted lens center. */
   const resolvePointerTrack = useCallback(
     (clientX: number) => {
       const track = trackRef.current;
@@ -562,7 +620,6 @@ export function LiquidGlassTabBar({
         0.55,
       );
 
-      // Find nearest enabled item by horizontal center distance
       let nearestIndex = -1;
       let nearestDistance = Number.POSITIVE_INFINITY;
       for (let i = 0; i < layout.items.length; i++) {
@@ -670,7 +727,6 @@ export function LiquidGlassTabBar({
     };
     dragRef.current = session;
 
-    // 115ms press threshold feels immediate like iOS 26 UITabBar
     session.timer = setTimeout(() => {
       if (dragRef.current === session) activateDrag();
     }, 115);
@@ -685,7 +741,6 @@ export function LiquidGlassTabBar({
     const dy = Math.abs(event.clientY - session.startY);
 
     if (!session.active) {
-      // Horizontal scrub immediately wakes the liquid glass lens; vertical scroll cancels cleanly
       if (dx >= 5 && dx >= dy) {
         activateDrag();
       } else if (dy > 14 && dy > dx) {
@@ -747,7 +802,6 @@ export function LiquidGlassTabBar({
       return;
     }
 
-    // Quick tap: let native button click handle navigation cleanly
     if (session.timer) clearTimeout(session.timer);
     dragRef.current = null;
   };
@@ -796,11 +850,18 @@ export function LiquidGlassTabBar({
     ["--lgtb-sat" as string]: String(cfg.saturation),
     ["--lgtb-rim-sat" as string]: String(cfg.rimSaturation),
     ["--lgtb-refraction" as string]: String(cfg.refraction),
+    ["--lgtb-chroma" as string]: String(cfg.chromaticAberration),
     ["--lgtb-specular" as string]: String(cfg.specular),
     ...(cfg.tintOpacity !== undefined
       ? { ["--lgtb-surface-alpha" as string]: String(cfg.tintOpacity) }
       : {}),
   };
+
+  const portalItems = items.map((item) => (
+    <div key={item.value} className="lgtb-lens-portal-item">
+      {renderTabVisual(item, true)}
+    </div>
+  ));
 
   return (
     <nav
@@ -876,7 +937,7 @@ export function LiquidGlassTabBar({
           );
         })}
 
-        {/* Interactive Liquid Glass Lens Droplet + Continuous Optical Portal */}
+        {/* Interactive Liquid Glass Lens Droplet + Dual-Zone Convex Portal */}
         <div
           ref={lensRef}
           aria-hidden="true"
@@ -891,17 +952,18 @@ export function LiquidGlassTabBar({
           <div className="lgtb-lens-shadow" />
           <div className="lgtb-lens-clip">
             <div className="lgtb-lens-rest-fill" />
-            <div className="lgtb-lens-liquid-fill" />
+            <div ref={lensFillRef} className="lgtb-lens-liquid-fill" />
             <div
               ref={portalRef}
               data-slot="tab-bar-lens-mirror"
               className="lgtb-lens-portal"
             >
-              {items.map((item) => (
-                <div key={item.value} className="lgtb-lens-portal-item">
-                  {renderTabVisual(item, true)}
-                </div>
-              ))}
+              {portalItems}
+            </div>
+            <div className="lgtb-lens-edge-mask">
+              <div ref={edgePortalRef} className="lgtb-lens-edge-portal">
+                {portalItems}
+              </div>
             </div>
             <div className="lgtb-lens-meniscus" />
             <div className="lgtb-lens-rim" />

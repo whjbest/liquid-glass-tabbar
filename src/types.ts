@@ -33,32 +33,34 @@ export type LiquidGlassSearchConfig = {
 };
 
 export type LiquidGlassConfig = {
-  /** Interior clear glass backdrop blur in px. Default: 14. */
+  /** Interior clear glass backdrop blur in px. Default: 3.5 (crystal clear). */
   blur?: number;
-  /** Perimeter refractive bevel ring blur in px. Default: 1.5. */
+  /** WebKit perimeter bevel ring blur in px. Default: 0.75. */
   rimBlur?: number;
-  /** Interior backdrop saturation multiplier. Default: 1.95. */
+  /** Interior backdrop saturation multiplier. Default: 2.05. */
   saturation?: number;
-  /** Perimeter refractive ring saturation multiplier. Default: 2.4. */
+  /** WebKit perimeter ring saturation multiplier. Default: 2.5. */
   rimSaturation?: number;
-  /** Override base translucent tint opacity (0..1). Undefined uses tuned theme defaults. */
+  /** Override base translucent tint opacity (0..1). Undefined uses clear theme defaults (~0.16–0.20). */
   tintOpacity?: number;
-  /** Controls refractive rim intensity, chromatic meniscus fringe, and optical boost (0..1). Default: 0.85. */
+  /** Controls Snell's Law refraction strength, bevel bend, and lens distortion (0..1). Default: 0.9. */
   refraction?: number;
-  /** Controls 3D Fresnel specular bevel & moving caustic highlight intensity (0..1). Default: 0.9. */
+  /** Controls RGB chromatic dispersion prism splitting at glass edges (0..1). Default: 0.75. */
+  chromaticAberration?: number;
+  /** Controls 3D Fresnel specular bevel & moving caustic highlight intensity (0..1). Default: 0.95. */
   specular?: number;
-  /** Optical magnification inside the lifted liquid lens droplet. Default: 1.16. */
+  /** Optical magnification inside the lifted liquid lens droplet. Default: 1.18. */
   lensMagnification?: number;
-  /** SwiftUI-equivalent spring response duration in seconds. Default: 0.38. */
+  /** SwiftUI-equivalent spring response duration in seconds. Default: 0.36. */
   springResponse?: number;
-  /** SwiftUI-equivalent spring damping fraction (0..1+). Default: 0.76. */
+  /** SwiftUI-equivalent spring damping fraction (0..1+). Default: 0.74. */
   springDamping?: number;
-  /** Velocity-driven liquid stretch & squish multiplier (0..2). Default: 1.0. */
+  /** Velocity-driven liquid stretch & squish multiplier (0..2). Default: 1.1. */
   squishIntensity?: number;
   /**
-   * Enables progressive SDF SVG displacement backdrop refraction on Chromium engines.
-   * WebKit / iOS Safari always uses the native GPU multi-layer rim refraction stack.
-   * Default: true.
+   * Enables real Snell's Law SDF SVG displacement + RGB dispersion backdrop
+   * refraction on Chromium engines. AppleWebKit uses the native GPU rim +
+   * dual-zone optical portal lens stack. Default: true.
    */
   enableSvgRefraction?: boolean;
 };
@@ -93,15 +95,16 @@ export type LiquidGlassTabBarProps = {
 export const LIQUID_GLASS_DEFAULTS: Required<
   Omit<LiquidGlassConfig, "tintOpacity">
 > = {
-  blur: 14,
-  rimBlur: 1.5,
-  saturation: 1.95,
-  rimSaturation: 2.4,
-  refraction: 0.85,
-  specular: 0.9,
-  lensMagnification: 1.16,
-  springResponse: 0.38,
-  springDamping: 0.76,
-  squishIntensity: 1.0,
+  blur: 3.5,
+  rimBlur: 0.75,
+  saturation: 2.05,
+  rimSaturation: 2.5,
+  refraction: 0.9,
+  chromaticAberration: 0.75,
+  specular: 0.95,
+  lensMagnification: 1.18,
+  springResponse: 0.36,
+  springDamping: 0.74,
+  squishIntensity: 1.1,
   enableSvgRefraction: true,
 };

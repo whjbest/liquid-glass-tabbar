@@ -1,16 +1,17 @@
 /* ============================================================================
- * liquid-glass-tabbar — High-Fidelity iOS 26 Liquid Glass TabBar
- * WebKit-native GPU multi-layer refraction + Portal Lens magnification
- * Zero external CSS framework dependencies; scoped via `.lgtb-*` & `--lgtb-*`
+ * liquid-glass-tabbar v0.2 — High-Fidelity iOS 26 Liquid Glass TabBar
+ * Clear optical glass + Snell's Law RGB dispersion (Chromium) +
+ * GPU Bevel Rim & Dual-Zone Convex Portal Lens (iOS Safari / WKWebView)
  * ========================================================================== */
 
 .lgtb-root {
-  --lgtb-blur: 14px;
-  --lgtb-rim-blur: 1.5px;
-  --lgtb-sat: 1.95;
-  --lgtb-rim-sat: 2.4;
-  --lgtb-refraction: 0.85;
-  --lgtb-specular: 0.9;
+  --lgtb-blur: 3.5px;
+  --lgtb-rim-blur: 0.75px;
+  --lgtb-sat: 2.05;
+  --lgtb-rim-sat: 2.5;
+  --lgtb-refraction: 0.9;
+  --lgtb-chroma: 0.75;
+  --lgtb-specular: 0.95;
   --lgtb-gap: 10px;
   --lgtb-padding: 4px;
   --lgtb-track-height: 62px;
@@ -21,30 +22,31 @@
     -apple-system, BlinkMacSystemFont, "SF Pro Rounded", "SF Pro Text",
     ui-rounded, "PingFang SC", system-ui, sans-serif;
 
-  /* Light appearance defaults */
-  --lgtb-fg: rgba(24, 24, 28, 0.72);
+  /* Light appearance: crystal-clear ice glass (low haze, high Fresnel contrast) */
+  --lgtb-fg: rgba(16, 16, 22, 0.78);
   --lgtb-fg-active: #007aff;
   --lgtb-surface-rgb: 255, 255, 255;
-  --lgtb-surface-alpha: 0.46;
-  --lgtb-core-brightness: 1.05;
-  --lgtb-core-contrast: 1.03;
-  --lgtb-rim-brightness: 1.18;
-  --lgtb-rim-contrast: 1.14;
-  --lgtb-pill-bg: rgba(0, 0, 0, 0.068);
-  --lgtb-pill-border: rgba(255, 255, 255, 0.52);
-  --lgtb-lens-tint: rgba(255, 255, 255, 0.34);
-  --lgtb-specular-top: rgba(255, 255, 255, 0.94);
-  --lgtb-specular-mid: rgba(255, 255, 255, 0.22);
-  --lgtb-specular-bottom: rgba(255, 255, 255, 0.72);
-  --lgtb-inner-shadow: rgba(0, 0, 0, 0.08);
+  --lgtb-surface-alpha: 0.22;
+  --lgtb-core-brightness: 1.04;
+  --lgtb-core-contrast: 1.04;
+  --lgtb-rim-brightness: 1.24;
+  --lgtb-rim-contrast: 1.22;
+  --lgtb-pill-bg: rgba(0, 0, 0, 0.07);
+  --lgtb-pill-border: rgba(255, 255, 255, 0.72);
+  --lgtb-lens-tint: rgba(255, 255, 255, 0.14);
+  --lgtb-specular-top: rgba(255, 255, 255, 0.98);
+  --lgtb-specular-mid: rgba(255, 255, 255, 0.24);
+  --lgtb-specular-bottom: rgba(255, 255, 255, 0.86);
+  --lgtb-inner-shadow: rgba(0, 0, 0, 0.11);
   --lgtb-drop-shadow:
-    0 12px 32px -10px rgba(0, 0, 0, 0.2), 0 2px 8px -2px rgba(0, 0, 0, 0.08);
+    0 12px 32px -10px rgba(0, 0, 0, 0.22), 0 2px 8px -2px rgba(0, 0, 0, 0.1);
   --lgtb-lens-shadow:
-    0 14px 32px -6px rgba(0, 0, 0, 0.22), 0 3px 10px -2px rgba(0, 0, 0, 0.1);
-  --lgtb-caustic-cool: rgba(110, 210, 255, 0.24);
-  --lgtb-caustic-warm: rgba(255, 175, 225, 0.18);
+    0 16px 36px -6px rgba(0, 0, 0, 0.24), 0 4px 12px -2px rgba(0, 0, 0, 0.12);
+  --lgtb-caustic-cool: rgba(100, 212, 255, 0.26);
+  --lgtb-caustic-warm: rgba(255, 160, 224, 0.22);
   --lgtb-frosted-bg: rgba(248, 248, 250, 0.76);
   --lgtb-frosted-ring: rgba(0, 0, 0, 0.08);
+  --lgtb-text-legibility: 0 1px 6px rgba(255, 255, 255, 0.45);
 
   box-sizing: border-box;
   display: flex;
@@ -65,31 +67,32 @@
   box-sizing: border-box;
 }
 
-/* Dark appearance tokens */
+/* Dark appearance: clear obsidian crystal with luminous Fresnel edges */
 .lgtb-root[data-appearance="dark"] {
-  --lgtb-fg: rgba(255, 255, 255, 0.64);
+  --lgtb-fg: rgba(255, 255, 255, 0.74);
   --lgtb-fg-active: #ffffff;
-  --lgtb-surface-rgb: 38, 38, 44;
-  --lgtb-surface-alpha: 0.44;
-  --lgtb-core-brightness: 1.12;
-  --lgtb-core-contrast: 1.06;
-  --lgtb-rim-brightness: 1.26;
-  --lgtb-rim-contrast: 1.18;
-  --lgtb-pill-bg: rgba(255, 255, 255, 0.14);
-  --lgtb-pill-border: rgba(255, 255, 255, 0.2);
-  --lgtb-lens-tint: rgba(255, 255, 255, 0.12);
-  --lgtb-specular-top: rgba(255, 255, 255, 0.56);
-  --lgtb-specular-mid: rgba(255, 255, 255, 0.08);
-  --lgtb-specular-bottom: rgba(255, 255, 255, 0.34);
-  --lgtb-inner-shadow: rgba(0, 0, 0, 0.36);
+  --lgtb-surface-rgb: 26, 26, 32;
+  --lgtb-surface-alpha: 0.18;
+  --lgtb-core-brightness: 1.14;
+  --lgtb-core-contrast: 1.08;
+  --lgtb-rim-brightness: 1.34;
+  --lgtb-rim-contrast: 1.24;
+  --lgtb-pill-bg: rgba(255, 255, 255, 0.13);
+  --lgtb-pill-border: rgba(255, 255, 255, 0.28);
+  --lgtb-lens-tint: rgba(255, 255, 255, 0.07);
+  --lgtb-specular-top: rgba(255, 255, 255, 0.74);
+  --lgtb-specular-mid: rgba(255, 255, 255, 0.12);
+  --lgtb-specular-bottom: rgba(255, 255, 255, 0.44);
+  --lgtb-inner-shadow: rgba(0, 0, 0, 0.42);
   --lgtb-drop-shadow:
-    0 16px 38px -10px rgba(0, 0, 0, 0.58), 0 2px 10px -2px rgba(0, 0, 0, 0.32);
+    0 16px 40px -10px rgba(0, 0, 0, 0.62), 0 2px 10px -2px rgba(0, 0, 0, 0.36);
   --lgtb-lens-shadow:
-    0 18px 38px -6px rgba(0, 0, 0, 0.62), 0 4px 12px -2px rgba(0, 0, 0, 0.36);
-  --lgtb-caustic-cool: rgba(110, 224, 255, 0.2);
-  --lgtb-caustic-warm: rgba(208, 155, 255, 0.16);
+    0 20px 42px -6px rgba(0, 0, 0, 0.68), 0 4px 14px -2px rgba(0, 0, 0, 0.4);
+  --lgtb-caustic-cool: rgba(110, 224, 255, 0.22);
+  --lgtb-caustic-warm: rgba(210, 150, 255, 0.18);
   --lgtb-frosted-bg: rgba(28, 28, 32, 0.72);
   --lgtb-frosted-ring: rgba(255, 255, 255, 0.1);
+  --lgtb-text-legibility: 0 1px 8px rgba(0, 0, 0, 0.55);
 }
 
 /* Size presets */
@@ -133,8 +136,6 @@
   z-index: 10;
 }
 
-/* Clip shell for the track's own glass materials so the elevated lens can
-   overflow above/below the capsule rim without clipping its own drop shadow. */
 .lgtb-glass-shell {
   position: absolute;
   inset: 0;
@@ -160,20 +161,18 @@
   -webkit-transform: translateZ(0);
 }
 
-/* Progressive Chromium SDF displacement refraction when available */
+/* Chromium real Snell's Law + RGB dispersion backdrop refraction */
 .lgtb-glass-core[data-svg-refract="true"] {
   backdrop-filter: var(--lgtb-svg-filter) saturate(var(--lgtb-sat))
     contrast(var(--lgtb-core-contrast)) brightness(var(--lgtb-core-brightness));
 }
 
-/* Layer 2: WebKit-Safe Refractive Bevel Ring
- * Parent carries ONLY the hollow ring mask; child carries ONLY backdrop-filter.
- * Separating mask and backdrop-filter prevents iOS Safari from dropping blur. */
+/* Layer 2 (WebKit / iOS): Separated parent-masked Refractive Bevel Ring */
 .lgtb-rim-mask {
   position: absolute;
   inset: 0;
   border-radius: inherit;
-  padding: 4.5px;
+  padding: 5.5px;
   pointer-events: none;
   opacity: var(--lgtb-refraction);
   -webkit-mask:
@@ -184,6 +183,11 @@
     linear-gradient(#fff 0 0) content-box,
     linear-gradient(#fff 0 0);
   mask-composite: exclude;
+}
+
+/* Never paint the WebKit fallback rim over a real Snell SVG refracted bevel */
+.lgtb-glass-core[data-svg-refract="true"] ~ .lgtb-rim-mask {
+  display: none;
 }
 
 .lgtb-rim-backdrop {
@@ -199,7 +203,7 @@
   -webkit-transform: translateZ(0);
 }
 
-/* Layer 3: Subtle internal luminance dome + chromatic edge dispersion */
+/* Layer 3: Internal optical thickness dome + subtle caustic bounce */
 .lgtb-glass-sheen {
   position: absolute;
   inset: 0;
@@ -208,21 +212,28 @@
   opacity: var(--lgtb-refraction);
   background:
     radial-gradient(
-      120% 70% at 50% -18%,
-      rgba(255, 255, 255, 0.24) 0%,
-      rgba(255, 255, 255, 0.04) 48%,
-      transparent 75%
+      110% 55% at 50% -12%,
+      rgba(255, 255, 255, 0.28) 0%,
+      rgba(255, 255, 255, 0.04) 46%,
+      transparent 72%
+    ),
+    radial-gradient(
+      95% 45% at 50% 114%,
+      rgba(255, 255, 255, 0.16) 0%,
+      transparent 65%
     ),
     linear-gradient(
       180deg,
       var(--lgtb-caustic-cool) 0%,
-      transparent 16%,
-      transparent 84%,
+      transparent 14%,
+      transparent 86%,
       var(--lgtb-caustic-warm) 100%
     );
   box-shadow:
-    inset 0 1px 1.5px 0 rgba(255, 255, 255, 0.24),
-    inset 0 -1.5px 3px 0 var(--lgtb-inner-shadow);
+    inset 0 1.5px 2px 0 rgba(255, 255, 255, 0.34),
+    inset 0 -2px 4px 0 var(--lgtb-inner-shadow),
+    inset 1.5px 0 3px 0 rgba(255, 255, 255, 0.14),
+    inset -1.5px 0 3px 0 rgba(255, 255, 255, 0.1);
 }
 
 /* Layer 4: 3D Fresnel Specular Bevel Border Ring */
@@ -230,16 +241,16 @@
   position: absolute;
   inset: 0;
   border-radius: inherit;
-  padding: 1.15px;
+  padding: 1.25px;
   pointer-events: none;
   z-index: 4;
   opacity: var(--lgtb-specular);
   background: linear-gradient(
-    152deg,
+    154deg,
     var(--lgtb-specular-top) 0%,
-    var(--lgtb-specular-mid) 28%,
-    rgba(255, 255, 255, 0.04) 50%,
-    var(--lgtb-specular-mid) 74%,
+    var(--lgtb-specular-mid) 24%,
+    rgba(255, 255, 255, 0.05) 50%,
+    var(--lgtb-specular-mid) 76%,
     var(--lgtb-specular-bottom) 100%
   );
   -webkit-mask:
@@ -275,6 +286,7 @@
   align-items: center;
   justify-content: center;
   outline: none;
+  text-shadow: var(--lgtb-text-legibility);
   transition: color 180ms ease;
 }
 
@@ -346,6 +358,7 @@
   font-weight: 700;
   line-height: 15px;
   text-align: center;
+  text-shadow: none;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.28);
 }
 
@@ -359,7 +372,7 @@
 }
 
 /* ============================================================================
- * Interactive Liquid Glass Lens Droplet + Continuous Optical Portal
+ * Interactive Liquid Glass Lens Droplet + Dual-Zone Convex Portal
  * ========================================================================== */
 
 .lgtb-lens {
@@ -379,8 +392,6 @@
   z-index: 3;
 }
 
-/* Clipping container inside the lens so portal magnification & internal gloss
-   respect the curved capsule silhouette cleanly on iOS WebKit. */
 .lgtb-lens-clip {
   position: relative;
   width: 100%;
@@ -391,18 +402,19 @@
   -webkit-transform: translateZ(0);
 }
 
-/* Resting pill fill fades down as the lens inflates into clear liquid crystal */
+/* Resting pill fill fades away as the droplet becomes crystal water */
 .lgtb-lens-rest-fill {
   position: absolute;
   inset: 0;
   border-radius: inherit;
   background: var(--lgtb-pill-bg);
   box-shadow: inset 0 0.5px 0 0 var(--lgtb-pill-border);
-  opacity: calc(1 - var(--lgtb-lift) * 0.85);
+  opacity: calc(1 - var(--lgtb-lift) * 0.94);
 }
 
-/* Elevated liquid droplet optical backing: softly diffuses the unmagnified
-   underlying items when lifted so the magnified portal reads crystal clear. */
+/* Elevated liquid droplet backing:
+ * - On WebKit: subtle blur diffuses unmagnified underlying glyphs cleanly.
+ * - On Chromium: swaps to real convex-dome Snell SVG refraction filter! */
 .lgtb-lens-liquid-fill {
   position: absolute;
   inset: 0;
@@ -410,41 +422,57 @@
   opacity: var(--lgtb-lift);
   background:
     radial-gradient(
-      90% 85% at calc(50% + var(--lgtb-light-x) * 28%) 12%,
-      rgba(255, 255, 255, 0.42) 0%,
-      rgba(255, 255, 255, 0.08) 54%,
-      transparent 100%
+      88% 72% at calc(50% + var(--lgtb-light-x) * 28%) 10%,
+      rgba(255, 255, 255, 0.44) 0%,
+      rgba(255, 255, 255, 0.08) 46%,
+      transparent 82%
+    ),
+    radial-gradient(
+      80% 42% at calc(50% - var(--lgtb-light-x) * 20%) 104%,
+      rgba(255, 255, 255, 0.24) 0%,
+      transparent 68%
     ),
     var(--lgtb-lens-tint);
-  -webkit-backdrop-filter: blur(2.6px) saturate(1.65) brightness(1.08);
-  backdrop-filter: blur(2.6px) saturate(1.65) brightness(1.08);
+  -webkit-backdrop-filter: blur(2.2px) saturate(1.75) brightness(1.1);
+  backdrop-filter: blur(2.2px) saturate(1.75) brightness(1.1);
 }
 
-/* Meniscus refraction highlight & subtle RGB chromatic aberration at the
-   curved left/right boundaries of the moving glass droplet. */
+.lgtb-lens-liquid-fill[data-svg-refract="true"] {
+  backdrop-filter: var(--lgtb-lens-svg-filter) saturate(1.85) brightness(1.1);
+}
+
+/* Meniscus refraction glow + curved prism caustics */
 .lgtb-lens-meniscus {
   position: absolute;
   inset: 0;
   border-radius: inherit;
   pointer-events: none;
-  z-index: 3;
+  z-index: 4;
   opacity: calc(var(--lgtb-lift) * var(--lgtb-refraction));
   background:
     linear-gradient(
       90deg,
-      rgba(90, 215, 255, 0.24) 0%,
-      transparent 14%,
-      transparent 86%,
-      rgba(255, 130, 210, 0.2) 100%
+      rgba(80, 215, 255, calc(0.32 * var(--lgtb-chroma))) 0%,
+      transparent 16%,
+      transparent 84%,
+      rgba(255, 118, 210, calc(0.28 * var(--lgtb-chroma))) 100%
     ),
     radial-gradient(
-      115% 65% at calc(50% + var(--lgtb-light-x) * 22%) -10%,
-      rgba(255, 255, 255, 0.52) 0%,
-      transparent 65%
+      105% 58% at calc(50% + var(--lgtb-light-x) * 24%) -8%,
+      rgba(255, 255, 255, 0.62) 0%,
+      rgba(255, 255, 255, 0.14) 38%,
+      transparent 66%
+    ),
+    radial-gradient(
+      76% 32% at calc(50% - var(--lgtb-light-x) * 18%) 105%,
+      rgba(255, 255, 255, 0.36) 0%,
+      transparent 68%
     );
   box-shadow:
-    inset 0 1.5px 2px 0 rgba(255, 255, 255, 0.5),
-    inset 0 -2px 4px 0 rgba(0, 0, 0, 0.14);
+    inset 0 2px 3px 0 rgba(255, 255, 255, 0.62),
+    inset 0 -2.5px 5px 0 rgba(0, 0, 0, 0.16),
+    inset 2.5px 0 4px 0 rgba(255, 255, 255, 0.22),
+    inset -2.5px 0 4px 0 rgba(255, 255, 255, 0.18);
 }
 
 /* Crisp Fresnel rim on the elevated lens droplet */
@@ -452,15 +480,15 @@
   position: absolute;
   inset: 0;
   border-radius: inherit;
-  padding: 1.25px;
+  padding: 1.4px;
   pointer-events: none;
-  z-index: 4;
-  opacity: calc(0.18 + var(--lgtb-lift) * 0.82 * var(--lgtb-specular));
+  z-index: 5;
+  opacity: calc(0.22 + var(--lgtb-lift) * 0.78 * var(--lgtb-specular));
   background: linear-gradient(
-    calc(148deg + var(--lgtb-light-x) * 24deg),
+    calc(146deg + var(--lgtb-light-x) * 26deg),
     var(--lgtb-specular-top) 0%,
-    rgba(255, 255, 255, 0.16) 36%,
-    rgba(255, 255, 255, 0.04) 55%,
+    rgba(255, 255, 255, 0.22) 32%,
+    rgba(255, 255, 255, 0.04) 54%,
     var(--lgtb-specular-bottom) 100%
   );
   -webkit-mask:
@@ -473,7 +501,6 @@
   mask-composite: exclude;
 }
 
-/* Floating drop shadow cast by the raised droplet */
 .lgtb-lens-shadow {
   position: absolute;
   inset: 0;
@@ -484,24 +511,55 @@
   opacity: var(--lgtb-lift);
 }
 
-/* Continuous Optical Portal Mirror:
- * Counter-translated to stay pixel-locked to the base track items, then
- * radially scaled around the droplet center so items passing through the
- * droplet magnify continuously across tab boundaries. */
-.lgtb-lens-portal {
+/* Dual-Zone Optical Portal Mirror (100% native on iOS WKWebView & Chromium):
+ * Zone 1 (Core): crisp radial magnification in the center of the droplet.
+ * Zone 2 (Outer 7px Meniscus Ring): stronger 1.32x peripheral radial stretch +
+ * RGB chromatic split so icons/labels visibly bend as they cross the glass rim! */
+.lgtb-lens-portal,
+.lgtb-lens-edge-portal {
   position: absolute;
   top: 0;
   left: 0;
-  z-index: 2;
   padding: var(--lgtb-padding);
   display: grid;
   grid-auto-flow: column;
   grid-auto-columns: minmax(0, 1fr);
   align-items: center;
   color: var(--lgtb-fg-active);
-  opacity: min(1, calc(var(--lgtb-lift) * 3.5));
   pointer-events: none;
   will-change: transform, opacity;
+}
+
+.lgtb-lens-portal {
+  z-index: 2;
+  opacity: min(1, calc(var(--lgtb-lift) * 3.5));
+}
+
+.lgtb-lens-edge-mask {
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  border-radius: inherit;
+  padding: 7px;
+  pointer-events: none;
+  opacity: min(1, calc(var(--lgtb-lift) * 3.2 * var(--lgtb-refraction)));
+  -webkit-mask:
+    linear-gradient(#fff 0 0) content-box,
+    linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  mask:
+    linear-gradient(#fff 0 0) content-box,
+    linear-gradient(#fff 0 0);
+  mask-composite: exclude;
+}
+
+.lgtb-lens-edge-portal {
+  filter: blur(0.35px) saturate(1.35);
+  text-shadow:
+    calc(-1.1px * var(--lgtb-lift) * var(--lgtb-chroma)) 0 0
+    rgba(0, 224, 255, 0.55),
+    calc(1.1px * var(--lgtb-lift) * var(--lgtb-chroma)) 0 0
+    rgba(255, 56, 152, 0.5);
 }
 
 .lgtb-lens-portal-item {
@@ -513,13 +571,12 @@
   justify-content: center;
 }
 
-/* Subtle chromatic edge fringe on magnified glyphs while droplet is elevated */
 .lgtb-lens[data-elevated="true"] .lgtb-lens-portal {
   text-shadow:
-    calc(-0.45px * var(--lgtb-lift) * var(--lgtb-refraction)) 0 0
-    rgba(0, 212, 255, 0.24),
-    calc(0.45px * var(--lgtb-lift) * var(--lgtb-refraction)) 0 0
-    rgba(255, 64, 160, 0.2);
+    calc(-0.4px * var(--lgtb-lift) * var(--lgtb-chroma)) 0 0
+    rgba(0, 212, 255, 0.25),
+    calc(0.4px * var(--lgtb-lift) * var(--lgtb-chroma)) 0 0
+    rgba(255, 64, 160, 0.22);
 }
 
 /* ============================================================================
@@ -545,7 +602,7 @@
 }
 
 .lgtb-search[data-pressed="true"] {
-  transform: scale(1.09);
+  transform: scale(1.1);
   box-shadow: var(--lgtb-lens-shadow);
 }
 
@@ -603,7 +660,8 @@
 .lgtb-root[data-variant="frosted"] .lgtb-rim-mask,
 .lgtb-root[data-variant="frosted"] .lgtb-glass-sheen,
 .lgtb-root[data-variant="frosted"] .lgtb-lens-meniscus,
-.lgtb-root[data-variant="frosted"] .lgtb-lens-rim {
+.lgtb-root[data-variant="frosted"] .lgtb-lens-rim,
+.lgtb-root[data-variant="frosted"] .lgtb-lens-edge-mask {
   display: none;
 }
 
@@ -640,7 +698,8 @@
   .lgtb-rim-mask,
   .lgtb-glass-sheen,
   .lgtb-lens-liquid-fill,
-  .lgtb-lens-meniscus {
+  .lgtb-lens-meniscus,
+  .lgtb-lens-edge-mask {
     display: none;
   }
 }
