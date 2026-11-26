@@ -103,8 +103,8 @@ export const LIQUID_GLASS_DEFAULTS: Required<
   chromaticAberration: 0.75,
   specular: 0.95,
   lensMagnification: 1.18,
-  springResponse: 0.38,
-  springDamping: 0.68,
-  squishIntensity: 1.15,
+  springResponse: 0.36,
+  springDamping: 0.78,
+  squishIntensity: 1.1,
   enableSvgRefraction: true,
 };

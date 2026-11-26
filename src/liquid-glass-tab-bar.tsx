@@ -247,7 +247,8 @@ export function LiquidGlassTabBar({
     if (!lensEl || !layout) return;
 
     const firstItem = layout.items[0];
-    if (!firstItem) return;
+    const lastItem = layout.items[layout.items.length - 1];
+    if (!firstItem || !lastItem) return;
 
     const isLiquid = variantRef.current === "liquid";
     const reduced = reducedMotionRef.current;
@@ -258,39 +259,68 @@ export function LiquidGlassTabBar({
       trackEl.style.setProperty("--lgtb-press", press.toFixed(4));
     }
 
-    const cx = springXRef.current.value;
     const vx = springXRef.current.velocity;
+    const dragging = Boolean(dragRef.current?.active);
     const jelly = isLiquid && !reduced ? springJellyRef.current.value : 0;
     const baseW = Math.max(springWRef.current.value, 24);
     const baseH = firstItem.height;
     const cy = firstItem.centerY;
 
+    // Soft-clamp horizontal center during tap flight so underdamped springs +
+    // jelly stretch never shoot the droplet outside the TabBar capsule ends.
+    let cx = springXRef.current.value;
+    let wallOvershoot = overshootRef.current;
+    if (!dragging) {
+      const minCx = firstItem.centerX;
+      const maxCx = lastItem.centerX;
+      if (cx < minCx) {
+        const excess = minCx - cx;
+        const clamped = 4 * (1 - 1 / (excess / 8 + 1));
+        cx = minCx - clamped;
+        wallOvershoot = -Math.min(1, excess / 14);
+      } else if (cx > maxCx) {
+        const excess = cx - maxCx;
+        const clamped = 4 * (1 - 1 / (excess / 8 + 1));
+        cx = maxCx + clamped;
+        wallOvershoot = Math.min(1, excess / 14);
+      }
+    }
+
     // Keep the clear crystal droplet visibly glossy during both flight and landing jelly wobble
-    const speedLift = Math.tanh(Math.abs(vx) / 620) * 0.96;
-    const wobbleLift = Math.min(0.82, Math.abs(jelly) * 3.4);
+    const speedLift = Math.tanh(Math.abs(vx) / 620) * 0.92;
+    const wobbleLift = Math.min(0.75, Math.abs(jelly) * 3.0);
     const flightLift =
       isLiquid && !reduced
-        ? Math.min(0.95, Math.max(speedLift, wobbleLift))
+        ? Math.min(0.92, Math.max(speedLift, wobbleLift))
         : 0;
-    const lift =
-      isLiquid && !reduced
-        ? Math.min(
-            1.12,
-            Math.max(0, Math.max(springLiftRef.current.value, flightLift)),
-          )
-        : 0;
+    const pressLift =
+      isLiquid && !reduced ? Math.max(0, springLiftRef.current.value) : 0;
+    const lift = Math.min(1.06, Math.max(pressLift, flightLift));
 
-    // Overhangs top & bottom edges of the track so the convex lens pulls in
-    // and refracts the TabBar's own borders + outside page color like iOS 26.
-    const w = baseW + lift * LENS_EXTRA_WIDTH;
-    const h = baseH + lift * LENS_EXTRA_HEIGHT;
-    const x = cx - w / 2;
-    const y = cy - h / 2;
+    // Only expand aggressively when actively held/dragged; quick tap hops use
+    // a tighter envelope so the pill stays sleekly framed within the capsule.
+    const sizeExpansion = Math.max(pressLift, flightLift * 0.45);
+    const w = baseW + sizeExpansion * LENS_EXTRA_WIDTH;
+    const h = baseH + sizeExpansion * LENS_EXTRA_HEIGHT;
 
     const { scaleX, scaleY, lightOffset } =
       isLiquid && !reduced
-        ? jellyToDeformation(jelly, vx, overshootRef.current)
+        ? jellyToDeformation(jelly, vx, wallOvershoot)
         : { scaleX: 1, scaleY: 1, lightOffset: 0 };
+
+    // Account for stretched half-width at the capsule ends so even stretched jelly
+    // compresses cleanly against the track wall instead of protruding out.
+    if (!dragging) {
+      const halfStretched = (w * scaleX) / 2;
+      const minAllowedCx = halfStretched - 3;
+      const maxAllowedCx = layout.width - halfStretched + 3;
+      if (minAllowedCx <= maxAllowedCx) {
+        cx = Math.min(Math.max(cx, minAllowedCx), maxAllowedCx);
+      }
+    }
+
+    const x = cx - w / 2;
+    const y = cy - h / 2;
 
     const clampedOpacityLift = Math.min(1, Math.max(0, lift));
 
@@ -518,12 +548,19 @@ export function LiquidGlassTabBar({
       initializedRef.current = true;
       paintLens();
     } else {
-      // Inject crisp jelly launch stretch + subtle track breath on tab switch
+      // Inject bounded jelly launch stretch + subtle track breath on tab switch
+      // (clamped so rapid repeated taps never stack runaway velocity)
       if (travelDistance > 4 && variantRef.current === "liquid") {
         const k = cfgRef.current.squishIntensity;
-        springJellyRef.current.velocity +=
-          Math.min(2.8, (travelDistance / 90) * 1.55) * k;
-        springPressRef.current.velocity += 1.2;
+        const impulse = Math.min(2.2, (travelDistance / 95) * 1.35) * k;
+        springJellyRef.current.velocity = Math.min(
+          3.2,
+          Math.max(springJellyRef.current.velocity, impulse),
+        );
+        springPressRef.current.velocity = Math.min(
+          1.4,
+          Math.max(springPressRef.current.velocity, 0.95),
+        );
       }
       startLoop();
     }
