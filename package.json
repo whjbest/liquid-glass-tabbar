@@ -1,6 +1,6 @@
 {
   "name": "liquid-glass-tabbar",
-  "version": "0.5.0",
+  "version": "0.5.1",
   "description": "High-fidelity iOS 26 Liquid Glass TabBar for React and WebKit (Safari / WKWebView)",
   "license": "MIT",
   "type": "module",

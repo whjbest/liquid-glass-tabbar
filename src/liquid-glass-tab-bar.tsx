@@ -55,8 +55,8 @@ type DragSession = {
   timer: ReturnType<typeof setTimeout> | null;
 };
 
-const LENS_EXTRA_WIDTH = 16;
-const LENS_EXTRA_HEIGHT = 20;
+const LENS_EXTRA_WIDTH = 14;
+const LENS_EXTRA_HEIGHT = 18;
 
 function DefaultSearchIcon() {
   return (
