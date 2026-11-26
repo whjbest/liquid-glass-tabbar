@@ -133,12 +133,12 @@ export function createCapsuleRefractionFilter(
   if (!ctx) return null;
 
   const radius = Math.min(width, height) / 2;
-  // Lens uses a crisp ~24% peripheral bevel so the flat crystal center stays
-  // 100% razor-sharp (zero chromatic ghosting on icons/labels) while the curved
-  // rim smoothly bends & disperses the TabBar edges and crossing graphics.
+  // Lens uses a crisp ~23% peripheral bevel so the flat crystal center stays
+  // 100% razor-sharp while the curved meniscus continuously pulls in and bends
+  // the TabBar's top/bottom edges and outside background without skipping pixels.
   const bevel =
     profile === "lens"
-      ? Math.min(18, Math.min(width, height) * 0.25)
+      ? Math.min(17, Math.min(width, height) * 0.23)
       : Math.min(18, Math.min(width, height) * 0.3);
 
   const fieldX = new Float32Array(cw * ch);
@@ -166,17 +166,19 @@ export function createCapsuleRefractionFilter(
             capsuleSdf(x, y - 0.5, width, height, radius);
           const len = Math.hypot(gx, gy) || 1;
           const mag = snellDeflection(depth, bevel, 1.48);
-          dx = (-gx / len) * mag;
-          dy = (-gy / len) * mag;
+          // Positive SDF gradient points outward from the bevel: sampling outward
+          // creates a monotonic convex magnification mapping (f'(y) > 0) that pulls
+          // the TabBar's top/bottom lines & outside background smoothly into the
+          // overhanging meniscus instead of skipping over them.
+          dx = (gx / len) * mag;
+          dy = (gy / len) * mag;
         }
 
-        // Track keeps a whisper-light core dome; lens center stays strictly 0-shift
-        // so icons & labels inside the lifted droplet are crystal sharp.
         if (profile === "track") {
           const nx = (x - width / 2) / Math.max(width / 2, 1);
           const ny = (y - height / 2) / Math.max(height / 2, 1);
-          dx += -nx * 0.025;
-          dy += -ny * 0.025;
+          dx += nx * 0.025;
+          dy += ny * 0.025;
         }
       }
 
@@ -212,17 +214,17 @@ export function createCapsuleRefractionFilter(
 
   const id = `lgtb-snell-${++filterCounter}`;
 
-  // Calibrated displacement: bold enough to visibly pull & curve the TabBar's
-  // top/bottom edge into the overhanging meniscus, while staying silky smooth.
+  // Calibrated convex shift (~10–11px at rim): bends the overhanging TabBar top
+  // & bottom lines cleanly inward by ~3px across the meniscus (matching iOS 26).
   const baseScale =
-    (profile === "lens" ? 28 : 34) * Math.max(0, Math.min(1.5, refraction));
+    (profile === "lens" ? 22 : 26) * Math.max(0, Math.min(1.5, refraction));
   // Lifted lens keeps strict 0 blur so content transitions to crystal-clear on press
   const stdDev = profile === "lens" ? 0 : Math.max(0, blur * 0.28);
 
   // Delicate pastel prism dispersion strictly along the outer curved bevel
   const dispersionSpread =
     Math.max(0, Math.min(1, chromaticAberration)) *
-    (profile === "lens" ? 0.055 : 0.05);
+    (profile === "lens" ? 0.08 : 0.06);
   const scaleR = (baseScale * (1 - dispersionSpread)).toFixed(2);
   const scaleG = baseScale.toFixed(2);
   const scaleB = (baseScale * (1 + dispersionSpread)).toFixed(2);
